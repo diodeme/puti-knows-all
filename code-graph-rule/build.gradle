@@ -1,0 +1,25 @@
+description = 'code Graph Rule Engine - 规则引擎模块'
+
+dependencies {
+    // 依赖核心模块
+    api project(':code-graph-base')
+
+    // Spring Expression Language
+    api "org.springframework:spring-expression:${springVersion}"
+    api "org.springframework:spring-context:${springVersion}"
+
+    // YAML parser
+    api "org.yaml:snakeyaml:2.0"
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // Logging
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // Test dependencies
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+}

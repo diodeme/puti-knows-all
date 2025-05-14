@@ -1,0 +1,45 @@
+package com.puti.code.base.model;
+
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.experimental.SuperBuilder;
+
+import java.time.LocalDateTime;
+
+/**
+ * 注释节点
+ */
+@Getter
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+public class CommentNode extends Node {
+    private String type;
+    private Integer lineStart;
+    private Integer lineEnd;
+    private String branchName;
+    private String commitStatus;
+    private String commitId;
+    private LocalDateTime lastUpdated;
+    private String repoId;
+
+    @Override
+    public String getTag() {
+        return NodeType.COMMENT.getValue();
+    }
+
+    @Override
+    public Object[] getProperties() {
+        return new Object[]{
+                type, lineStart, lineEnd, branchName, commitStatus,
+                commitId, lastUpdated, repoId, getContent()
+        };
+    }
+
+    @Override
+    public String[] getPropertyNames() {
+        return new String[]{
+                "type", "line_start", "line_end", "branch_name", "commit_status",
+                "commit_id", "last_updated", "repo_id", "content"
+        };
+    }
+}

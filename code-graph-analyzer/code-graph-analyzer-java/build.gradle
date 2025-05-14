@@ -1,0 +1,25 @@
+description = 'code Graph Java Analyzer - Java代码分析器'
+
+dependencies {
+    // 依赖核心模块
+    api project(':code-graph-base')
+    api project(':code-graph-repository')
+    api project(':code-graph-ai')
+    api project(':code-graph-rule')
+
+    // Spoon for Java code analysis
+    api "fr.inria.gforge.spoon:spoon-core:${spoonVersion}"
+    api 'fr.inria.gforge.spoon:spoon-decompiler:0.1.0'
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // Logging
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // Test dependencies
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+}

@@ -1,0 +1,194 @@
+# 规则配置文件
+# 支持Spring EL表达式语法
+
+# 入口点规则配置
+entryPointRules:
+  enabled: true
+  rules:
+    # Spring Web MVC 注解
+    - "hasAnnotation('org.springframework.web.bind.annotation.RequestMapping')"
+    - "hasAnnotation('org.springframework.web.bind.annotation.GetMapping')"
+    - "hasAnnotation('org.springframework.web.bind.annotation.PostMapping')"
+    - "hasAnnotation('org.springframework.web.bind.annotation.PutMapping')"
+    - "hasAnnotation('org.springframework.web.bind.annotation.DeleteMapping')"
+    - "hasAnnotation('org.springframework.web.bind.annotation.PatchMapping')"
+
+    # Spring WebFlux 注解
+    - "hasAnnotation('org.springframework.web.bind.annotation.RestController') and isPublic()"
+
+    # JAX-RS 注解
+    - "hasAnnotation('javax.ws.rs.GET')"
+    - "hasAnnotation('javax.ws.rs.POST')"
+    - "hasAnnotation('javax.ws.rs.PUT')"
+    - "hasAnnotation('javax.ws.rs.DELETE')"
+    - "hasAnnotation('javax.ws.rs.PATCH')"
+    - "hasAnnotation('javax.ws.rs.Path')"
+
+    # Servlet 接口实现
+    - "implementsInterface('javax.servlet.http.HttpServlet') and (methodNameEquals('doGet') or methodNameEquals('doPost') or methodNameEquals('doPut') or methodNameEquals('doDelete'))"
+
+    # Spring MVC Controller 接口
+    - "implementsInterface('org.springframework.web.servlet.mvc.Controller') and methodNameEquals('handleRequest')"
+
+    # 定时任务
+    - "hasAnnotation('org.springframework.scheduling.annotation.Scheduled')"
+
+    # 事件监听器
+    - "hasAnnotation('org.springframework.context.event.EventListener')"
+    - "hasAnnotation('org.springframework.transaction.event.TransactionalEventListener')"
+
+    # 消息队列监听器
+    - "hasAnnotation('org.springframework.jms.annotation.JmsListener')"
+    - "hasAnnotation('org.springframework.kafka.annotation.KafkaListener')"
+    - "hasAnnotation('org.springframework.amqp.rabbit.annotation.RabbitListener')"
+
+  # 自定义函数（可选）
+  customFunctions:
+    # 示例：检查是否为REST API
+    isRestApi: "hasAnyAnnotation({'org.springframework.web.bind.annotation.GetMapping', 'org.springframework.web.bind.annotation.PostMapping', 'org.springframework.web.bind.annotation.PutMapping', 'org.springframework.web.bind.annotation.DeleteMapping'})"
+
+# 依赖注入规则配置（预留扩展）
+dependencyInjectionRules:
+  enabled: true
+  factMapping:
+    providerAnnotations:
+      - annotation: "org.springframework.stereotype.Component"
+        target: "TYPE"
+        nameAttributes: ["value"]
+        fallbackNameSource: "typeSimpleNameLowerCamel"
+      - annotation: "org.springframework.stereotype.Service"
+        target: "TYPE"
+        nameAttributes: ["value"]
+        fallbackNameSource: "typeSimpleNameLowerCamel"
+      - annotation: "org.springframework.stereotype.Repository"
+        target: "TYPE"
+        nameAttributes: ["value"]
+        fallbackNameSource: "typeSimpleNameLowerCamel"
+      - annotation: "org.springframework.stereotype.Controller"
+        target: "TYPE"
+        nameAttributes: ["value"]
+        fallbackNameSource: "typeSimpleNameLowerCamel"
+      - annotation: "org.springframework.context.annotation.Configuration"
+        target: "TYPE"
+        nameAttributes: ["value"]
+        fallbackNameSource: "typeSimpleNameLowerCamel"
+      - annotation: "org.springframework.context.annotation.Bean"
+        target: "METHOD"
+        nameAttributes: ["name", "value"]
+        fallbackNameSource: "methodName"
+    injectionAnnotations:
+      - annotation: "org.springframework.beans.factory.annotation.Autowired"
+        mode: "autowired"
+      - annotation: "javax.annotation.Resource"
+        mode: "resource"
+        nameAttribute: "name"
+      - annotation: "jakarta.annotation.Resource"
+        mode: "resource"
+        nameAttribute: "name"
+    qualifierAnnotations:
+      - annotation: "org.springframework.beans.factory.annotation.Qualifier"
+        attribute: "value"
+    priorityAnnotations:
+      - annotation: "org.springframework.context.annotation.Primary"
+        priority: 100
+  resolutionRules:
+    order:
+      - "qualifier"
+      - "requestedName"
+      - "memberName"
+      - "requiredTypeDefaultName"
+      - "priority"
+      - "uniqueCandidate"
+  customFunctions:
+    bindingFact: "#factKind == 'binding'"
+    callRetargetFact: "#factKind == 'callRetarget'"
+  rules:
+    - name: "qualifiedCandidateBinding"
+      match: "#bindingFact"
+      when: "#qualifierPresent and #candidateMatched and #resolutionKind == 'qualifier'"
+      priority: 100
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "requestedNameBinding"
+      match: "#bindingFact"
+      when: "#requestedNamePresent and #candidateMatched and #resolutionKind == 'requestedName'"
+      priority: 90
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "memberNameBinding"
+      match: "#bindingFact"
+      when: "#candidateMatched and #resolutionKind == 'memberName'"
+      priority: 85
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "typeDefaultNameBinding"
+      match: "#bindingFact"
+      when: "#candidateMatched and #resolutionKind == 'requiredTypeDefaultName'"
+      priority: 80
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "priorityCandidateBinding"
+      match: "#bindingFact"
+      when: "#candidateMatched and #priorityCandidateMatched"
+      priority: 70
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "uniqueCandidateBinding"
+      match: "#bindingFact"
+      when: "#candidateMatched and #uniqueCandidateMatched"
+      priority: 60
+      emitEdge:
+        type: "instance_of"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        requested_name: "#requestedName"
+    - name: "retargetedInjectionCall"
+      match: "#callRetargetFact"
+      when: "#candidateMatched"
+      priority: 50
+      emitEdge:
+        type: "injection_calls"
+        category: "FRAMEWORK"
+      emitProperties:
+        injection_mode: "#injectionMode"
+        resolution_kind: "#resolutionKind"
+        resolved_type: "#resolvedTypeName"
+        declared_target_type: "#declaredTargetTypeName"
+
+# RPC规则配置（预留扩展）
+rpcRules:
+  enabled: false
+  rules: []

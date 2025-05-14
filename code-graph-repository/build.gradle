@@ -1,0 +1,23 @@
+description = 'code Graph Database - 数据库客户端封装'
+
+dependencies {
+    // 依赖核心模块
+    api project(':code-graph-base')
+    // NebulaGraph Java client
+    api "com.vesoft:client:${nebulaVersion}"
+    
+    // Milvus Java client
+    api "io.milvus:milvus-sdk-java:${milvusVersion}"
+    
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    
+    // Logging
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+    
+    // Test dependencies
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+}

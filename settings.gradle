@@ -1,0 +1,36 @@
+// 插件管理配置
+pluginManagement {
+    repositories {
+        maven {
+            url = 'https://maven.aliyun.com/repository/gradle-plugin'
+        }
+        maven {
+            url = 'https://maven.aliyun.com/repository/public'
+        }
+        gradlePluginPortal()
+    }
+    plugins {
+        id 'org.springframework.boot' version '3.2.0'
+        id 'io.spring.dependency-management' version '1.1.4'
+    }
+}
+
+rootProject.name = 'code-graph'
+
+// 核心公共组件
+include 'code-graph-base'
+// 数据库客户端
+include 'code-graph-repository'
+// 向量服务
+include 'code-graph-ai'
+// 规则引擎
+include 'code-graph-rule'
+// Java代码分析器
+include 'code-graph-analyzer'
+include 'code-graph-analyzer:code-graph-analyzer-java'
+// 说明书生成器
+include 'code-graph-documentation'
+// 主应用程序
+include 'code-graph-app'
+// Web后台服务
+include 'code-graph-server'

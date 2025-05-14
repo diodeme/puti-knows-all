@@ -1,0 +1,57 @@
+plugins {
+    id 'application'
+}
+
+description = 'code Graph App - 主应用程序'
+
+application {
+    // 如果命令行传入了 -Pmain=... 就用传入的，否则用默认的
+    mainClass = project.hasProperty('myMain') ? project.getProperty('myMain') : 'com.puti.code.graph.app.DefaultMain'
+}
+
+dependencies {
+    // 依赖所有模块
+    implementation project(':code-graph-base')
+    implementation project(':code-graph-repository')
+    implementation project(':code-graph-ai')
+    implementation project(':code-graph-analyzer:code-graph-analyzer-java')
+    implementation project(':code-graph-rule')
+    implementation project(':code-graph-documentation')
+
+    // Apache POI for Excel export
+    implementation 'org.apache.poi:poi:5.4.0'
+    implementation 'org.apache.poi:poi-ooxml:5.4.0'
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // Logging
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // Test dependencies
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+}
+
+// 创建可执行的fat jar
+jar {
+    manifest {
+        attributes 'Main-Class': application.mainClass
+    }
+    zip64 = true
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    // Explicitly declare dependencies on other modules' jar tasks to fix Gradle validation issue
+    dependsOn project(':code-graph-base').tasks.named('jar')
+    dependsOn project(':code-graph-repository').tasks.named('jar')
+    dependsOn project(':code-graph-ai').tasks.named('jar')
+    dependsOn project(':code-graph-analyzer:code-graph-analyzer-java').tasks.named('jar')
+    dependsOn project(':code-graph-rule').tasks.named('jar')
+    dependsOn project(':code-graph-documentation').tasks.named('jar')
+}

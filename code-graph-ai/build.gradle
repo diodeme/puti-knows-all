@@ -1,0 +1,40 @@
+description = 'code Graph AI - AI服务模块'
+
+dependencies {
+    // 依赖核心模块
+    api project(':code-graph-base')
+
+    implementation 'org.springframework.ai:spring-ai-openai:1.0.0-M6'
+    implementation 'org.springframework.ai:spring-ai-core:1.0.0-M6'
+
+    implementation "org.springframework.boot:spring-boot-starter:${springBootVersion}"
+    implementation "org.springframework.boot:spring-boot-starter-web:${springBootVersion}"
+
+    implementation "org.springframework:spring-context:${springVersion}"
+    implementation "org.springframework:spring-beans:${springVersion}"
+
+
+    // OpenAI client for vector generation
+    api "com.theokanning.openai-gpt3-java:service:0.18.2"
+
+    // JTokkit for accurate token counting
+    implementation "com.knuddels:jtokkit:1.1.0"
+
+    // HTTP client
+    implementation "org.apache.httpcomponents:httpclient:${httpclientVersion}"
+    implementation "org.apache.httpcomponents:httpcore:${httpcoreVersion}"
+
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // Logging
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // Test dependencies
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testImplementation "org.springframework.boot:spring-boot-starter-test:${springBootVersion}"
+}
