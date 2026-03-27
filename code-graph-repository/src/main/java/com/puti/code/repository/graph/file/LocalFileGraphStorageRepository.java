@@ -5,6 +5,7 @@ import com.puti.code.base.config.AppConfig;
 import com.puti.code.base.model.Edge;
 import com.puti.code.base.model.Node;
 import com.puti.code.repository.graph.GraphStorageRepository;
+import com.puti.code.repository.graph.schema.GraphSchemaManager;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedWriter;
@@ -27,16 +28,23 @@ public class LocalFileGraphStorageRepository implements GraphStorageRepository {
     };
 
     private final Path storageDir;
+    private final GraphSchemaManager graphSchemaManager;
     private final BufferedWriter nodeWriter;
     private final BufferedWriter edgeWriter;
 
     public LocalFileGraphStorageRepository() {
-        this(LocalFileGraphRepositorySupport.resolveStorageDir(AppConfig.getInstance()));
+        this(LocalFileGraphRepositorySupport.resolveStorageDir(AppConfig.getInstance()), new LocalFileGraphSchemaManager());
     }
 
     public LocalFileGraphStorageRepository(Path storageDir) {
+        this(storageDir, new LocalFileGraphSchemaManager());
+    }
+
+    public LocalFileGraphStorageRepository(Path storageDir, GraphSchemaManager graphSchemaManager) {
         try {
             this.storageDir = storageDir;
+            this.graphSchemaManager = graphSchemaManager;
+            this.graphSchemaManager.ensureRegisteredSchemas();
             Files.createDirectories(storageDir);
             Path nodePath = storageDir.resolve("nodes.jsonl");
             Path edgePath = storageDir.resolve("edges.jsonl");
@@ -57,6 +65,9 @@ public class LocalFileGraphStorageRepository implements GraphStorageRepository {
 
     @Override
     public void insertEdge(Edge edge) {
+        if (edge != null) {
+            graphSchemaManager.ensureEdgeSchema(edge.getTypeName(), edge.getCategory(), edge.resolvedProperties());
+        }
         writeLine(edgeWriter, toEdgeRecord(edge));
     }
 

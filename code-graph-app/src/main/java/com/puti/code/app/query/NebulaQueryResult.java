@@ -1,7 +1,6 @@
 package com.puti.code.app.query;
 
 import com.vesoft.nebula.client.graph.data.ResultSet;
-import com.puti.code.documentation.repository.graph.support.GraphEntityFormatter;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -135,7 +134,7 @@ public class NebulaQueryResult {
 
     /**
      * 将Value对象转换为字符串
-     * 解决16进制格式问题，使用GraphEntityFormatter.parseValueWrapper()进行类型感知的格式化
+     * 解决16进制格式问题，使用 NebulaValueFormatter 进行类型感知的格式化
      *
      * @param value Value对象（可能是Nebula的ValueWrapper）
      * @return 字符串表示
@@ -163,8 +162,8 @@ public class NebulaQueryResult {
                     return String.valueOf(asLongMethod.invoke(value));
                 }
 
-                // 对于其他类型，使用GraphEntityFormatter处理
-                Object parsed = GraphEntityFormatter.parseValueWrapper(value);
+                // 对于其他类型，使用 Nebula 值格式化器处理
+                Object parsed = NebulaValueFormatter.parseValueWrapper(value);
                 if (parsed != null) {
                     return parsed.toString();
                 }

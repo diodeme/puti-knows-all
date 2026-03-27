@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * 子图查询服务
- * 负责从NebulaGraph中查询和解析子图数据
+ * 负责从图查询仓储中查询和解析子图数据
  *
  * @author diodehe
  */

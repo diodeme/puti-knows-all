@@ -2,7 +2,6 @@ package com.puti.code.app.query;
 
 import com.vesoft.nebula.client.graph.data.ResultSet;
 import com.vesoft.nebula.client.graph.data.ValueWrapper;
-import com.puti.code.documentation.repository.graph.support.GraphEntityFormatter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -46,13 +45,13 @@ public class NebulaResultFormatter {
 
     /**
      * 解析 ValueWrapper 为可读值
-     * 复用 GraphEntityFormatter.parseValueWrapper 的逻辑
+     * 复用 NebulaValueFormatter 的类型感知解析逻辑
      *
      * @param wrapper ValueWrapper
      * @return 可读值
      */
     private static Object parseValueWrapper(ValueWrapper wrapper) {
-        return GraphEntityFormatter.parseValueWrapper(wrapper);
+        return NebulaValueFormatter.parseValueWrapper(wrapper);
     }
 
     /**

@@ -6,7 +6,7 @@ import java.util.Optional;
 /**
  * 图查询抽象接口。
  */
-public interface GraphQueryRepository {
+public interface GraphQueryRepository extends AutoCloseable {
 
     List<GraphQueryNode> searchMethodByName(String methodName);
 
@@ -28,5 +28,9 @@ public interface GraphQueryRepository {
                 .map(properties -> properties.get("is_entry_point"))
                 .map(value -> value instanceof Boolean ? (Boolean) value : Boolean.parseBoolean(String.valueOf(value)))
                 .orElse(false);
+    }
+
+    @Override
+    default void close() {
     }
 }

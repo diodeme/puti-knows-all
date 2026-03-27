@@ -5,6 +5,8 @@ import com.puti.code.base.model.EdgePropertySchema;
 import com.puti.code.base.model.EdgePropertyType;
 import com.puti.code.base.model.EdgeSchema;
 import com.puti.code.base.model.EdgeSchemaRegistry;
+import com.puti.code.repository.graph.dialect.GraphDialect;
+import com.puti.code.repository.graph.schema.GraphSchemaManager;
 import com.vesoft.nebula.client.graph.data.ResultSet;
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Nebula edge schema 管理器。
  */
 @Slf4j
-public class NebulaSchemaManager {
+public class NebulaSchemaManager implements GraphSchemaManager {
 
     private static final int DEFAULT_PROPAGATION_MAX_ATTEMPTS = 5;
     private static final long DEFAULT_PROPAGATION_WAIT_MILLIS = 200L;
@@ -32,6 +34,7 @@ public class NebulaSchemaManager {
 
     private final QueryExecutor queryExecutor;
     private final EdgeSchemaRegistry edgeSchemaRegistry;
+    private final GraphDialect graphDialect;
     private final int propagationMaxAttempts;
     private final long propagationWaitMillis;
     private final Map<String, Set<String>> edgePropertyCache = new ConcurrentHashMap<>();
@@ -39,24 +42,42 @@ public class NebulaSchemaManager {
     private final Set<String> existingEdgesCache = ConcurrentHashMap.newKeySet();
 
     public NebulaSchemaManager(QueryExecutor queryExecutor, EdgeSchemaRegistry edgeSchemaRegistry) {
-        this(queryExecutor, edgeSchemaRegistry, DEFAULT_PROPAGATION_MAX_ATTEMPTS, DEFAULT_PROPAGATION_WAIT_MILLIS);
+        this(queryExecutor, edgeSchemaRegistry, new NebulaGraphDialect(),
+                DEFAULT_PROPAGATION_MAX_ATTEMPTS, DEFAULT_PROPAGATION_WAIT_MILLIS);
+    }
+
+    public NebulaSchemaManager(QueryExecutor queryExecutor, EdgeSchemaRegistry edgeSchemaRegistry, GraphDialect graphDialect) {
+        this(queryExecutor, edgeSchemaRegistry, graphDialect,
+                DEFAULT_PROPAGATION_MAX_ATTEMPTS, DEFAULT_PROPAGATION_WAIT_MILLIS);
     }
 
     NebulaSchemaManager(QueryExecutor queryExecutor, EdgeSchemaRegistry edgeSchemaRegistry,
                         int propagationMaxAttempts, long propagationWaitMillis) {
+        this(queryExecutor, edgeSchemaRegistry, new NebulaGraphDialect(), propagationMaxAttempts, propagationWaitMillis);
+    }
+
+    NebulaSchemaManager(QueryExecutor queryExecutor, EdgeSchemaRegistry edgeSchemaRegistry,
+                        GraphDialect graphDialect, int propagationMaxAttempts, long propagationWaitMillis) {
         this.queryExecutor = queryExecutor;
         this.edgeSchemaRegistry = edgeSchemaRegistry;
+        this.graphDialect = graphDialect;
         this.propagationMaxAttempts = Math.max(1, propagationMaxAttempts);
         this.propagationWaitMillis = Math.max(0L, propagationWaitMillis);
     }
 
-    public synchronized void ensureRegisteredEdges() {
+    @Override
+    public synchronized void ensureRegisteredSchemas() {
         refreshEdgeCache();
         for (EdgeSchema schema : edgeSchemaRegistry.getAll()) {
             ensureEdgeSchema(schema);
         }
     }
 
+    public synchronized void ensureRegisteredEdges() {
+        ensureRegisteredSchemas();
+    }
+
+    @Override
     public synchronized void ensureEdgeSchema(String edgeType, EdgeCategory category, Map<String, Object> properties) {
         if (properties != null) {
             properties.forEach((key, value) -> {
@@ -75,16 +96,15 @@ public class NebulaSchemaManager {
     public List<String> buildEnsureStatements(EdgeSchema schema, Set<String> existingEdges, Set<String> existingProps) {
         List<String> statements = new ArrayList<>();
         if (!existingEdges.contains(schema.getValue())) {
-            statements.add(buildCreateEdgeStatement(schema));
+            statements.add(graphDialect.buildCreateEdgeStatement(schema));
             return statements;
         }
 
-        List<String> missingColumns = schema.getPropertySchemas().stream()
+        List<EdgePropertySchema> missingColumns = schema.getPropertySchemas().stream()
                 .filter(property -> !existingProps.contains(property.getName()))
-                .map(this::buildPropertyDefinition)
                 .toList();
         if (!missingColumns.isEmpty()) {
-            statements.add("ALTER EDGE `" + schema.getValue() + "` ADD (" + String.join(", ", missingColumns) + ")");
+            statements.add(graphDialect.buildAlterEdgeAddPropertiesStatement(schema.getValue(), missingColumns));
         }
         return statements;
     }
@@ -118,24 +138,6 @@ public class NebulaSchemaManager {
             log.info("Ensured Nebula edge schema with query: {}", statement);
             awaitSchemaPropagation(schema, statement);
         }
-    }
-
-    private String buildCreateEdgeStatement(EdgeSchema schema) {
-        String columns = schema.getPropertySchemas().stream()
-                .map(this::buildPropertyDefinition)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        return "CREATE EDGE IF NOT EXISTS `" + schema.getValue() + "` (" + columns + ")"
-                + " ttl_duration = 0, ttl_col = \"\", comment = \"" + escapeComment(schema.getComment()) + "\"";
-    }
-
-    private String buildPropertyDefinition(EdgePropertySchema propertySchema) {
-        String comment = propertySchema.getComment() != null ? " COMMENT \"" + escapeComment(propertySchema.getComment()) + "\"" : "";
-        return "`" + propertySchema.getName() + "` " + propertySchema.getType().getNebulaType() + " NULL" + comment;
-    }
-
-    private String escapeComment(String comment) {
-        return comment == null ? "" : comment.replace("\"", "\\\"");
     }
 
     private void awaitSchemaPropagation(EdgeSchema schema, String statement) {
@@ -179,7 +181,7 @@ public class NebulaSchemaManager {
         existingEdgesCache.clear();
         edgePropertyCache.clear();
 
-        ResultSet edgeResult = queryExecutor.execute("SHOW EDGES");
+        ResultSet edgeResult = queryExecutor.execute(graphDialect.buildShowEdgesQuery());
         if (edgeResult == null || !edgeResult.isSucceeded() || edgeResult.getRows() == null) {
             return;
         }
@@ -201,7 +203,7 @@ public class NebulaSchemaManager {
     }
 
     private Set<String> describeEdge(String edgeName) {
-        ResultSet describeResult = queryExecutor.execute("DESCRIBE EDGE `" + edgeName + "`");
+        ResultSet describeResult = queryExecutor.execute(graphDialect.buildDescribeEdgeQuery(edgeName));
         Set<String> properties = new LinkedHashSet<>();
         if (describeResult == null || !describeResult.isSucceeded() || describeResult.getRows() == null) {
             return properties;
@@ -230,7 +232,7 @@ public class NebulaSchemaManager {
     }
 
     private String showCreateEdge(String edgeName) {
-        ResultSet createResult = queryExecutor.execute("SHOW CREATE EDGE `" + edgeName + "`");
+        ResultSet createResult = queryExecutor.execute(graphDialect.buildShowCreateEdgeQuery(edgeName));
         if (createResult == null || !createResult.isSucceeded() || createResult.getRows() == null
                 || createResult.getRows().isEmpty()) {
             return null;

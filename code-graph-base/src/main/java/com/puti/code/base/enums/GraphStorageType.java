@@ -28,7 +28,7 @@ public enum GraphStorageType {
         return Arrays.stream(values())
                 .filter(type -> normalize(type.value).equals(normalizedValue))
                 .findFirst()
-                .orElse(NEBULA);
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported graph.storage.type: " + value));
     }
 
     private static String normalize(String value) {

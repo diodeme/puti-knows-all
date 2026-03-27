@@ -5,12 +5,14 @@ import com.puti.code.base.model.EdgeDefinition;
 import com.puti.code.base.model.EdgeDefinitionResolver;
 import com.puti.code.base.model.EdgeSchema;
 import com.puti.code.base.model.EdgeSchemaRegistry;
+import com.puti.code.repository.graph.dialect.GraphDialect;
 import com.puti.code.repository.graph.query.GraphDirection;
 import com.puti.code.repository.graph.query.GraphQueryEdge;
 import com.puti.code.repository.graph.query.GraphQueryNode;
 import com.puti.code.repository.graph.query.GraphQueryRepository;
 import com.puti.code.repository.graph.query.GraphQuerySubgraph;
 import com.puti.code.repository.nebula.NebulaGraphClient;
+import com.puti.code.repository.nebula.NebulaGraphDialect;
 import com.vesoft.nebula.client.graph.data.Node;
 import com.vesoft.nebula.client.graph.data.Relationship;
 import com.vesoft.nebula.client.graph.data.ResultSet;
@@ -32,26 +34,27 @@ import java.util.Optional;
 public class NebulaGraphQueryRepository implements GraphQueryRepository {
 
     private final NebulaGraphClient nebulaGraphClient;
+    private final GraphDialect graphDialect;
     private final EdgeSchemaRegistry edgeSchemaRegistry = EdgeSchemaRegistry.getInstance();
     private final EdgeDefinitionResolver edgeDefinitionResolver = new EdgeDefinitionResolver(edgeSchemaRegistry);
     private volatile List<String> cachedSubgraphEdgeTypes = List.of();
 
     public NebulaGraphQueryRepository() {
-        this(new NebulaGraphClient());
+        this(new NebulaGraphClient(new NebulaGraphDialect()), new NebulaGraphDialect());
     }
 
     public NebulaGraphQueryRepository(NebulaGraphClient nebulaGraphClient) {
+        this(nebulaGraphClient, new NebulaGraphDialect());
+    }
+
+    public NebulaGraphQueryRepository(NebulaGraphClient nebulaGraphClient, GraphDialect graphDialect) {
         this.nebulaGraphClient = nebulaGraphClient;
+        this.graphDialect = graphDialect;
     }
 
     @Override
     public List<GraphQueryNode> searchMethodByName(String methodName) {
-        String escapedMethodName = escapeNebulaString(methodName);
-        String query = String.format(
-                "MATCH (v:function) WHERE v.function.full_name STARTS WITH \"%s\" OR v.function.name == \"%s\" "
-                        + "RETURN v LIMIT 100",
-                escapedMethodName, escapedMethodName);
-        ResultSet result = nebulaGraphClient.execute(query);
+        ResultSet result = executeQuery(graphDialect.buildSearchMethodByNameQuery(methodName), "search method by name");
         List<GraphQueryNode> nodes = new ArrayList<>();
         if (result == null || !result.isSucceeded() || result.getRows() == null) {
             return nodes;
@@ -71,19 +74,16 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
 
     @Override
     public Optional<GraphQueryNode> findFunctionByFullName(String methodFullName) {
-        String escapedMethodFullName = escapeNebulaString(methodFullName);
-        String query = String.format("MATCH (v:function) WHERE v.function.full_name == \"%s\" RETURN v LIMIT 1",
-                escapedMethodFullName);
-        ResultSet result = nebulaGraphClient.execute(query);
-        return readFirstNode(result);
+        return readFirstNode(executeQuery(
+                graphDialect.buildFindFunctionByFullNameQuery(methodFullName),
+                "find function by full name"));
     }
 
     @Override
     public Optional<String> findFunctionIdByFullName(String methodFullName) {
-        String escapedMethodFullName = escapeNebulaString(methodFullName);
-        String query = String.format("MATCH (v:function) WHERE v.function.full_name == \"%s\" RETURN id(v) as vid LIMIT 1",
-                escapedMethodFullName);
-        ResultSet result = nebulaGraphClient.execute(query);
+        ResultSet result = executeQuery(
+                graphDialect.buildFindFunctionIdByFullNameQuery(methodFullName),
+                "find function id by full name");
         if (result == null || !result.isSucceeded() || result.getRows() == null || result.getRows().isEmpty()) {
             return Optional.empty();
         }
@@ -97,15 +97,13 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
 
     @Override
     public GraphQuerySubgraph getSubgraph(String startNodeId, int pathDepth, GraphDirection direction, List<String> edgeTypes) {
-        String traversalClause = buildTraversalClause(direction, edgeTypes == null || edgeTypes.isEmpty()
-                ? resolveSubgraphEdgeTypes()
-                : edgeTypes);
-        String query = String.format(
-                "GET SUBGRAPH WITH PROP %d STEPS FROM \"%s\"%s YIELD VERTICES AS nodes, EDGES AS relationships",
-                pathDepth,
-                escapeNebulaString(startNodeId),
-                traversalClause);
-        ResultSet result = nebulaGraphClient.execute(query);
+        ResultSet result = executeQuery(
+                graphDialect.buildGetSubgraphQuery(
+                        startNodeId,
+                        pathDepth,
+                        direction,
+                        edgeTypes == null || edgeTypes.isEmpty() ? resolveSubgraphEdgeTypes() : edgeTypes),
+                "load subgraph");
         if (result == null || !result.isSucceeded() || result.getRows() == null) {
             return GraphQuerySubgraph.builder().build();
         }
@@ -139,20 +137,14 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
 
     @Override
     public Optional<GraphQueryNode> findNodeById(String nodeId) {
-        String query = String.format("MATCH (v) WHERE id(v) == \"%s\" RETURN v AS node LIMIT 1",
-                escapeNebulaString(nodeId));
-        ResultSet result = nebulaGraphClient.execute(query);
-        return readFirstNode(result);
+        return readFirstNode(executeQuery(graphDialect.buildFindNodeByIdQuery(nodeId), "find node by id"));
     }
 
     @Override
     public List<GraphQueryNode> getEntryPoints(String projectId, String branchName) {
-        String query = String.format("""
-                MATCH (v:function{is_entry_point:TRUE})
-                WHERE v.function.repo_id == \"%s\" AND v.function.branch_name == \"%s\"
-                RETURN v
-                """, escapeNebulaString(projectId), escapeNebulaString(branchName));
-        ResultSet result = nebulaGraphClient.execute(query);
+        ResultSet result = executeQuery(
+                graphDialect.buildGetEntryPointsQuery(projectId, branchName),
+                "load entry points");
         List<GraphQueryNode> nodes = new ArrayList<>();
         if (result == null || !result.isSucceeded() || result.getRows() == null) {
             return nodes;
@@ -172,7 +164,7 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
 
     @Override
     public long countEntryPoints() {
-        ResultSet result = nebulaGraphClient.execute("MATCH (v:function{is_entry_point:TRUE}) RETURN count(v) as count");
+        ResultSet result = executeQuery(graphDialect.buildCountEntryPointsQuery(), "count entry points");
         if (result == null || !result.isSucceeded() || result.getRows() == null || result.getRows().isEmpty()) {
             return 0L;
         }
@@ -182,6 +174,11 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
             log.debug("Failed to parse entry point count", e);
             return 0L;
         }
+    }
+
+    @Override
+    public void close() {
+        nebulaGraphClient.close();
     }
 
     private Optional<GraphQueryNode> readFirstNode(ResultSet result) {
@@ -312,20 +309,6 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
         return edgeDefinition.getCategory().name();
     }
 
-    private String escapeNebulaString(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    private String buildTraversalClause(GraphDirection direction, List<String> edgeTypes) {
-        if (edgeTypes == null || edgeTypes.isEmpty()) {
-            return "";
-        }
-        return " " + direction.name() + " " + String.join(", ", edgeTypes);
-    }
-
     private List<String> resolveSubgraphEdgeTypes() {
         if (!cachedSubgraphEdgeTypes.isEmpty()) {
             return cachedSubgraphEdgeTypes;
@@ -342,7 +325,7 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
     }
 
     private List<String> loadEdgeTypesFromNebula() {
-        ResultSet resultSet = nebulaGraphClient.execute("SHOW EDGES");
+        ResultSet resultSet = executeQuery(graphDialect.buildShowEdgesQuery(), "load edge types");
         if (resultSet == null || !resultSet.isSucceeded() || resultSet.getRows() == null) {
             return List.of();
         }
@@ -358,5 +341,17 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
             }
         }
         return edgeTypes.stream().distinct().toList();
+    }
+
+    private ResultSet executeQuery(String query, String operation) {
+        ResultSet resultSet = nebulaGraphClient.execute(query);
+        if (resultSet == null) {
+            log.warn("Nebula {} returned null result, query={}", operation, query);
+            return null;
+        }
+        if (!resultSet.isSucceeded()) {
+            log.warn("Nebula {} failed, query={}, error={}", operation, query, resultSet.getErrorMessage());
+        }
+        return resultSet;
     }
 }

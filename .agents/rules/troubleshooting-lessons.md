@@ -25,6 +25,8 @@
 - 不给 `local_file` 单独配 `storage.path` 时，落盘目录必须从稳定配置推导，例如 `project.root_path`；不要直接绑 `user.dir`，否则 analyzer、server、documentation 分进程运行时会各读各的目录。
 - 动态 edge 类型不要在 analyzer、server、documentation 各自手写 `EdgeType -> EdgeSchemaRegistry -> getOrCreate` 解析链；统一抽一个 `EdgeDefinitionResolver`，否则 category/displayName/自动注册策略很快会漂移。
 - 查询侧如果既要算 edge `category` 又要算展示名，不要分别各写一遍 registry fallback；两处都复用同一个 `EdgeDefinitionResolver`，否则“分类能识别、展示名识别不到”这类分叉问题很容易出现。
+- `graph.storage.type` 这类后端选择配置不要把未知值静默回退到默认实现；配置拼错时如果仍偷偷落回 `nebula`，调用方会误以为抽象层切换成功，实际数据却还在写默认后端。
+- 面向 server/documentation 的图查询适配层不要再直接 import Nebula `Node`/`Relationship`/`ValueWrapper`；Nebula 专用值格式化器放到 repository 或专项调试工具里，否则查询 DTO 虽然抽象出来了，上层模块仍会在编译期被 Nebula SDK 锁死。
 
 ## 3. DI、规则与语义解析
 - Provider 候选登记、注入点提取、优先级排序、字段绑定、调用重定向要共享同一套解析结果；不要在多个 processor 里各维护一套 Spring 规则。
@@ -42,6 +44,7 @@
 - Fat Jar 手工展开 `runtimeClasspath` 时，所有被打入包的模块都要在 `jar.dependsOn(...)` 显式声明对应 `jar` 任务依赖。
 - 不要并行执行会编译同一子模块的多个 `gradlew` 命令，避免共享 `build/classes` 目录竞争。
 - 受限环境执行前端构建时，把 `TEMP`、`TMP`、`HOME`、`USERPROFILE` 指到工作区内可写目录。
+- 持有底层连接池/Session 的 repository Bean 统一实现 `AutoCloseable`（或显式 destroy-method），让 Spring 在 shutdown 时释放资源；否则 server/documentation 常驻进程里 `NebulaGraphClient` 这类连接会静默泄漏到进程退出。
 - 排障不要只看表层断言；Spoon、`AbstractHandler`、Webpack/Node 基础库等底层日志，往往更早暴露真实故障点。
 
 ## 5. 协议、前端与跨端数据
