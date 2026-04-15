@@ -46,13 +46,12 @@ public class GraphVectorMilvusClient implements AutoCloseable {
 
     public GraphVectorMilvusClient() {
         config = AppConfig.getInstance();
-//        client = new MilvusClientV2(ConnectConfig.builder()
-//                .uri(config.getMilvusUri())
-//                .username(config.getMilvusUsername())
-//                .password(config.getMilvusPassword())
-//                .build());
-        client = null;
-//        ensureCollectionExists();
+        client = new MilvusClientV2(ConnectConfig.builder()
+                .uri(config.getMilvusUri())
+                .username(config.getMilvusUsername())
+                .password(config.getMilvusPassword())
+                .build());
+        ensureCollectionExists();
     }
 
     /**

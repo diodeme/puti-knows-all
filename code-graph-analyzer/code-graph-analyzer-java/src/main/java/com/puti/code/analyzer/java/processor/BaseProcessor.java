@@ -63,10 +63,10 @@ public abstract class BaseProcessor<T extends CtElement> extends AbstractProcess
             // 生成向量
             String content = getNodeContent(node);
 
-//            if(ParseType.PROJECT.equals(parseType)) {
-//                float[] vector = vectorGenerator.generateVector(content);
-//                node.setVector(vector);
-//            }
+            if(ParseType.PROJECT.equals(parseType)) {
+                float[] vector = vectorGenerator.generateVector(content);
+                node.setVector(vector);
+            }
 
             // 添加到缓冲区
             synchronized (nodeBuffer) {
@@ -125,10 +125,10 @@ public abstract class BaseProcessor<T extends CtElement> extends AbstractProcess
                 try {
                     // 批量插入到图存储
                     graphStorageRepository.batchInsertNodes(new ArrayList<>(nodeBuffer));
-//                    if(ParseType.PROJECT.equals(parseType)) {
-//                        // 批量插入到Milvus
-//                        graphVectorMilvusClient.batchUpsertNodeVectors(new ArrayList<>(nodeBuffer));
-//                    }
+                    if(ParseType.PROJECT.equals(parseType)) {
+                        // 批量插入到Milvus
+                        graphVectorMilvusClient.batchUpsertNodeVectors(new ArrayList<>(nodeBuffer));
+                    }
 
                     getLogger().info("Batch processed {} nodes", nodeBuffer.size());
                     nodeBuffer.clear();

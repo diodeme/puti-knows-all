@@ -47,13 +47,12 @@ public class DocumentationVectorClient implements AutoCloseable {
 
     public DocumentationVectorClient() {
         config = AppConfig.getInstance();
-        client = null;
-//        client = new MilvusClientV2(ConnectConfig.builder()
-//                .uri(config.getMilvusUri())
-//                .username(config.getMilvusUsername())
-//                .password(config.getMilvusPassword())
-//                .build());
-//        ensureDocumentationCollectionExists();
+        client = new MilvusClientV2(ConnectConfig.builder()
+                .uri(config.getMilvusUri())
+                .username(config.getMilvusUsername())
+                .password(config.getMilvusPassword())
+                .build());
+        ensureDocumentationCollectionExists();
     }
 
     /**
