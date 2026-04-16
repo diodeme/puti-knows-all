@@ -29,6 +29,11 @@ public class LocalFileGraphSchemaManager implements GraphSchemaManager {
     }
 
     @Override
+    public void ensureRegisteredTags() {
+        // local_file 不使用 NebulaGraph，无需创建 Tag schema。
+    }
+
+    @Override
     public void ensureEdgeSchema(String edgeType, EdgeCategory category, Map<String, Object> properties) {
         if (edgeType == null || edgeType.isBlank()) {
             return;

@@ -30,6 +30,11 @@ public class NebulaGraphDialect implements GraphDialect {
     }
 
     @Override
+    public String buildShowTagsQuery() {
+        return "SHOW TAGS";
+    }
+
+    @Override
     public String buildDescribeEdgeQuery(String edgeName) {
         return "DESCRIBE EDGE `" + edgeName + "`";
     }
@@ -59,6 +64,29 @@ public class NebulaGraphDialect implements GraphDialect {
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
         return "ALTER EDGE `" + edgeName + "` ADD (" + columns + ")";
+    }
+
+    @Override
+    public String buildCreateTagStatement(String tagName, Map<String, String> properties) {
+        String columns = properties.entrySet().stream()
+                .map(e -> "`" + e.getKey() + "` " + e.getValue() + " NULL")
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        return "CREATE TAG IF NOT EXISTS `" + tagName + "` (" + columns + ")";
+    }
+
+    @Override
+    public String buildCreateTagIndexStatement(String tagName, String propName, int stringLength) {
+        String indexName = "idx_" + tagName + "_" + propName;
+        if (stringLength > 0) {
+            return "CREATE TAG INDEX IF NOT EXISTS `" + indexName + "` ON `" + tagName + "`(`" + propName + "`(" + stringLength + "))";
+        }
+        return "CREATE TAG INDEX IF NOT EXISTS `" + indexName + "` ON `" + tagName + "`(`" + propName + "`)";
+    }
+
+    @Override
+    public String buildRebuildTagIndexStatement(String tagName, String propName) {
+        return "REBUILD TAG INDEX `idx_" + tagName + "_" + propName + "`";
     }
 
     @Override

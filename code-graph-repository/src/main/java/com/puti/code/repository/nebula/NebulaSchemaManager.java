@@ -5,6 +5,7 @@ import com.puti.code.base.model.EdgePropertySchema;
 import com.puti.code.base.model.EdgePropertyType;
 import com.puti.code.base.model.EdgeSchema;
 import com.puti.code.base.model.EdgeSchemaRegistry;
+import com.puti.code.base.model.NodeType;
 import com.puti.code.repository.graph.dialect.GraphDialect;
 import com.puti.code.repository.graph.schema.GraphSchemaManager;
 import com.vesoft.nebula.client.graph.data.ResultSet;
@@ -40,6 +41,21 @@ public class NebulaSchemaManager implements GraphSchemaManager {
     private final Map<String, Set<String>> edgePropertyCache = new ConcurrentHashMap<>();
     private final Map<String, String> edgeCreateStatementCache = new ConcurrentHashMap<>();
     private final Set<String> existingEdgesCache = ConcurrentHashMap.newKeySet();
+    private final Set<String> existingTagsCache = ConcurrentHashMap.newKeySet();
+
+    /** 需要创建索引的 Tag 属性：tagName -> list of (propName, stringLength)，stringLength=0 表示非 string 类型 */
+    private static final Map<String, List<IndexDef>> TAG_INDEX_DEFINITIONS = Map.of(
+            "function", List.of(
+                    new IndexDef("full_name", 256),
+                    new IndexDef("name", 128),
+                    new IndexDef("repo_id", 64),
+                    new IndexDef("branch_name", 64),
+                    new IndexDef("is_entry_point", 0)
+            )
+    );
+
+    private record IndexDef(String propName, int stringLength) {
+    }
 
     public NebulaSchemaManager(QueryExecutor queryExecutor, EdgeSchemaRegistry edgeSchemaRegistry) {
         this(queryExecutor, edgeSchemaRegistry, new NebulaGraphDialect(),
@@ -67,10 +83,30 @@ public class NebulaSchemaManager implements GraphSchemaManager {
 
     @Override
     public synchronized void ensureRegisteredSchemas() {
+        ensureRegisteredTags();
         refreshEdgeCache();
         for (EdgeSchema schema : edgeSchemaRegistry.getAll()) {
             ensureEdgeSchema(schema);
         }
+    }
+
+    @Override
+    public synchronized void ensureRegisteredTags() {
+        refreshTagCache();
+        for (NodeType nodeType : NodeType.values()) {
+            String tagName = nodeType.getValue();
+            if (!existingTagsCache.contains(tagName)) {
+                String statement = graphDialect.buildCreateTagStatement(tagName, nodeType.getPropertyDefinitions());
+                ResultSet resultSet = queryExecutor.execute(statement);
+                if (resultSet == null || !resultSet.isSucceeded()) {
+                    String message = resultSet != null ? resultSet.getErrorMessage() : "null result";
+                    throw new IllegalStateException("Failed to create tag " + tagName + ": " + message);
+                }
+                log.info("Created Nebula tag: {}", tagName);
+                awaitTagPropagation(tagName);
+            }
+        }
+        ensureRegisteredTagIndexes();
     }
 
     public synchronized void ensureRegisteredEdges() {
@@ -174,6 +210,60 @@ public class NebulaSchemaManager implements GraphSchemaManager {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for Nebula edge schema ["
                     + schema.getValue() + "] after query [" + statement + "]", e);
+        }
+    }
+
+    private void refreshTagCache() {
+        existingTagsCache.clear();
+        ResultSet tagResult = queryExecutor.execute(graphDialect.buildShowTagsQuery());
+        if (tagResult == null || !tagResult.isSucceeded() || tagResult.getRows() == null) {
+            return;
+        }
+        for (int i = 0; i < tagResult.getRows().size(); i++) {
+            try {
+                existingTagsCache.add(tagResult.rowValues(i).values().get(0).asString());
+            } catch (Exception e) {
+                log.warn("Failed to parse tag info from SHOW TAGS", e);
+            }
+        }
+    }
+
+    private void awaitTagPropagation(String tagName) {
+        for (int attempt = 1; attempt <= propagationMaxAttempts; attempt++) {
+            refreshTagCache();
+            if (existingTagsCache.contains(tagName)) {
+                return;
+            }
+            log.debug("Nebula tag {} is not visible yet, attempt {}/{}", tagName, attempt, propagationMaxAttempts);
+            if (attempt < propagationMaxAttempts) {
+                try {
+                    Thread.sleep(propagationWaitMillis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for tag [" + tagName + "]", e);
+                }
+            }
+        }
+        throw new IllegalStateException("Tag [" + tagName + "] did not become visible");
+    }
+
+    private void ensureRegisteredTagIndexes() {
+        for (Map.Entry<String, List<IndexDef>> entry : TAG_INDEX_DEFINITIONS.entrySet()) {
+            String tagName = entry.getKey();
+            for (IndexDef indexDef : entry.getValue()) {
+                String createStatement = graphDialect.buildCreateTagIndexStatement(tagName, indexDef.propName(), indexDef.stringLength());
+                ResultSet resultSet = queryExecutor.execute(createStatement);
+                if (resultSet == null || !resultSet.isSucceeded()) {
+                    String message = resultSet != null ? resultSet.getErrorMessage() : "null result";
+                    log.warn("Failed to create tag index {}.{}: {}", tagName, indexDef.propName(), message);
+                    continue;
+                }
+                log.info("Created Nebula tag index: idx_{}_{}", tagName, indexDef.propName());
+
+                String rebuildStatement = graphDialect.buildRebuildTagIndexStatement(tagName, indexDef.propName());
+                queryExecutor.execute(rebuildStatement);
+                log.info("Triggered rebuild for tag index: idx_{}_{}", tagName, indexDef.propName());
+            }
         }
     }
 

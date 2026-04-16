@@ -11,5 +11,7 @@ public interface GraphSchemaManager {
 
     void ensureRegisteredSchemas();
 
+    void ensureRegisteredTags();
+
     void ensureEdgeSchema(String edgeType, EdgeCategory category, Map<String, Object> properties);
 }
