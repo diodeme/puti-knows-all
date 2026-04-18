@@ -26,6 +26,7 @@ public class ClassNode extends Node {
     private LocalDateTime lastUpdated;
     private String repoId;
     private Boolean isExternal;
+    private String filePath;
 
     @Override
     public String getTag() {
@@ -37,7 +38,7 @@ public class ClassNode extends Node {
         return new Object[]{
                 name, fullName, type, visibility, isLibrary, lineStart, lineEnd,
                 branchName, commitStatus, commitId, lastUpdated, repoId,
-                isExternal, getContent()
+                isExternal, filePath, getContent()
         };
     }
 
@@ -46,7 +47,7 @@ public class ClassNode extends Node {
         return new String[]{
                 "name", "full_name", "type", "visibility", "is_library", "line_start", "line_end",
                 "branch_name", "commit_status", "commit_id", "last_updated", "repo_id",
-                "is_external", "content"
+                "is_external", "file_path", "content"
         };
     }
 }

@@ -62,6 +62,7 @@ public class AnnotationProcessor extends BaseProcessor<CtAnnotationType<?>> {
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
                     .isExternal(false)
+                    .filePath(resolveFilePath(element))
                     .build();
             classNode.setContent(element.toString());
 

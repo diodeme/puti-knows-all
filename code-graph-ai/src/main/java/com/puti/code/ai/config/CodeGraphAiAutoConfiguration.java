@@ -13,13 +13,14 @@ import org.springframework.context.annotation.Import;
  * @author diodehe
  */
 @Slf4j
-@AutoConfiguration
-@ConditionalOnClass(name = "org.springframework.ai.chat.client.ChatClient")
-@ComponentScan(basePackages = {
-    "com.puti.code.ai.documentation",
-    "com.puti.code.ai.vector",
-})
-@Import(SpringAiConfig.class)
+// Phase 1 暂不需要 Spring AI 自动配置（Chat/Embedding Bean），VectorGenerator 使用独立 HTTP 客户端
+// @AutoConfiguration
+// @ConditionalOnClass(name = "org.springframework.ai.chat.client.ChatClient")
+// @ComponentScan(basePackages = {
+//     "com.puti.code.ai.documentation",
+//     "com.puti.code.ai.vector",
+// })
+// @Import(SpringAiConfig.class)
 public class CodeGraphAiAutoConfiguration {
 
     public CodeGraphAiAutoConfiguration() {

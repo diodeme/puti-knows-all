@@ -86,6 +86,7 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
                     .isExternal(false)
+                    .filePath(resolveFilePath(element))
                     .build();
             classNode.setContent(element.toString());
 
@@ -142,6 +143,7 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             commentNode.setContent(comment.toString());
 
@@ -194,6 +196,7 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             annotationNode.setContent(annotation.toString());
 

@@ -22,10 +22,12 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -72,6 +74,9 @@ public class GraphQueryService {
         }
         if ("downstream".equals(type)) {
             return getSubgraph(request.getMethodFullName(), request.getPathDepth(), "OUT");
+        }
+        if ("both".equals(type)) {
+            return getBothSubgraph(request.getMethodFullName(), request.getPathDepth());
         }
         throw new IllegalArgumentException("Unknown query type: " + type);
     }
@@ -137,6 +142,42 @@ public class GraphQueryService {
         NodeResponse response = new NodeResponse();
         response.setNodes(new ArrayList<>(allNodes.values()));
         response.setEdges(allEdges);
+        enrichResponseMeta(response, queryInfo);
+        return response;
+    }
+
+    private NodeResponse getBothSubgraph(String methodFullName, Integer pathDepth) {
+        NodeResponse upstream = getSubgraph(methodFullName, pathDepth, "IN");
+        NodeResponse downstream = getSubgraph(methodFullName, pathDepth, "OUT");
+
+        Map<String, GraphNode> allNodes = new LinkedHashMap<>();
+        for (GraphNode node : upstream.getNodes()) {
+            allNodes.put(node.getId(), node);
+        }
+        for (GraphNode node : downstream.getNodes()) {
+            allNodes.putIfAbsent(node.getId(), node);
+        }
+
+        List<GraphEdge> allEdges = new ArrayList<>(upstream.getEdges());
+        Set<String> edgeKeys = new HashSet<>();
+        for (GraphEdge e : upstream.getEdges()) {
+            edgeKeys.add(e.getSource() + "->" + e.getTarget() + ":" + e.getType());
+        }
+        for (GraphEdge e : downstream.getEdges()) {
+            String key = e.getSource() + "->" + e.getTarget() + ":" + e.getType();
+            if (edgeKeys.add(key)) {
+                allEdges.add(e);
+            }
+        }
+
+        NodeResponse response = new NodeResponse();
+        response.setNodes(new ArrayList<>(allNodes.values()));
+        response.setEdges(allEdges);
+
+        Map<String, Object> queryInfo = new LinkedHashMap<>();
+        queryInfo.put("queryType", "both");
+        queryInfo.put("pathDepth", pathDepth != null ? pathDepth : 1);
+        queryInfo.put("methodFullName", methodFullName);
         enrichResponseMeta(response, queryInfo);
         return response;
     }

@@ -21,6 +21,7 @@ public class CommentNode extends Node {
     private String commitId;
     private LocalDateTime lastUpdated;
     private String repoId;
+    private String filePath;
 
     @Override
     public String getTag() {
@@ -31,7 +32,7 @@ public class CommentNode extends Node {
     public Object[] getProperties() {
         return new Object[]{
                 type, lineStart, lineEnd, branchName, commitStatus,
-                commitId, lastUpdated, repoId, getContent()
+                commitId, lastUpdated, repoId, filePath, getContent()
         };
     }
 
@@ -39,7 +40,7 @@ public class CommentNode extends Node {
     public String[] getPropertyNames() {
         return new String[]{
                 "type", "line_start", "line_end", "branch_name", "commit_status",
-                "commit_id", "last_updated", "repo_id", "content"
+                "commit_id", "last_updated", "repo_id", "file_path", "content"
         };
     }
 }

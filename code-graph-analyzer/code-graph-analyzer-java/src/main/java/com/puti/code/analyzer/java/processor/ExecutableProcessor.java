@@ -149,6 +149,7 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                 .commitStatus("COMMITTED")
                 .lastUpdated(now())
                 .repoId(config.getProjectId())
+                .filePath(resolveFilePath(element))
                 .build();
         commentNode.setContent(comment.toString());
         processNode(commentNode);
@@ -195,6 +196,7 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             annotationNode.setContent(annotation.toString());
             processNode(annotationNode);
@@ -433,6 +435,7 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                 .commitStatus("COMMITTED")
                 .lastUpdated(now())
                 .repoId(config.getProjectId())
+                .filePath(resolveFilePath(element))
                 .build();
         functionNode.setContent(element.toString());
         return functionNode;

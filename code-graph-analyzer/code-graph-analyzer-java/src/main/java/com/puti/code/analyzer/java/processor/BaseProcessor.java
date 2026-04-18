@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import spoon.processing.AbstractProcessor;
 import spoon.reflect.declaration.CtElement;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -106,6 +107,28 @@ public abstract class BaseProcessor<T extends CtElement> extends AbstractProcess
     }
 
     // getFactory()方法已经从AbstractProcessor继承，无需重新定义
+
+    /**
+     * 从 Spoon 元素中提取源文件的相对路径。
+     *
+     * @param element Spoon 元素
+     * @return 相对路径，如果无法获取则返回 null
+     */
+    protected String resolveFilePath(CtElement element) {
+        try {
+            if (element == null || !element.getPosition().isValidPosition()) {
+                return null;
+            }
+            File file = element.getPosition().getFile();
+            if (file == null) {
+                return null;
+            }
+            return config.getRelativePath(file.getAbsolutePath());
+        } catch (Exception e) {
+            getLogger().debug("Failed to resolve file path for element: {}", element, e);
+            return null;
+        }
+    }
 
     /**
      * 获取当前时间

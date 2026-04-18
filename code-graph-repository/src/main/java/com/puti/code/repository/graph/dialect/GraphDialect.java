@@ -57,4 +57,6 @@ public interface GraphDialect {
     String buildGetEntryPointsQuery(String projectId, String branchName);
 
     String buildCountEntryPointsQuery();
+
+    String buildGetContainingFilePathQuery(String nodeId);
 }

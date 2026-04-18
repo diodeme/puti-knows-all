@@ -239,6 +239,28 @@ public class NebulaGraphDialect implements GraphDialect {
         return "MATCH (v:function{is_entry_point:TRUE}) RETURN count(v) as count";
     }
 
+    @Override
+    public String buildGetContainingFilePathQuery(String nodeId) {
+        return String.format(
+                "MATCH (f:file)-[:contains*1..3]->(target) WHERE id(target) == \"%s\" RETURN f.file.file_path AS file_path LIMIT 1",
+                escapeString(nodeId));
+    }
+
+    public String buildDescribeTagQuery(String tagName) {
+        return "DESCRIBE TAG `" + tagName + "`";
+    }
+
+    public String buildAlterTagAddPropertiesStatement(String tagName, Map<String, String> properties) {
+        if (properties == null || properties.isEmpty()) {
+            return "";
+        }
+        String columns = properties.entrySet().stream()
+                .map(e -> "`" + e.getKey() + "` " + e.getValue() + " NULL")
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        return "ALTER TAG `" + tagName + "` ADD (" + columns + ")";
+    }
+
     private String buildTraversalClause(GraphDirection direction, List<String> edgeTypes) {
         if (edgeTypes == null || edgeTypes.isEmpty()) {
             return "";

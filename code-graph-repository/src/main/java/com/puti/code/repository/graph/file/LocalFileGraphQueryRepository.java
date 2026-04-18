@@ -138,6 +138,11 @@ public class LocalFileGraphQueryRepository implements GraphQueryRepository {
                 .count();
     }
 
+    @Override
+    public Optional<String> getContainingFilePath(String nodeId) {
+        return Optional.empty();
+    }
+
     private List<LocalFileGraphEdgeRecord> resolveEdges(LocalFileGraphSnapshot snapshot, String nodeId, GraphDirection direction) {
         return switch (direction) {
             case IN -> snapshot.getIncomingEdges().getOrDefault(nodeId, List.of());

@@ -12,6 +12,7 @@ import com.vesoft.nebula.client.graph.data.ResultSet;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -104,9 +105,56 @@ public class NebulaSchemaManager implements GraphSchemaManager {
                 }
                 log.info("Created Nebula tag: {}", tagName);
                 awaitTagPropagation(tagName);
+            } else {
+                ensureTagProperties(tagName, nodeType.getPropertyDefinitions());
             }
         }
         ensureRegisteredTagIndexes();
+    }
+
+    private void ensureTagProperties(String tagName, Map<String, String> expectedProperties) {
+        if (!(graphDialect instanceof NebulaGraphDialect nebulaDialect)) {
+            return;
+        }
+        Set<String> existingProps = describeTagProperties(nebulaDialect, tagName);
+        Map<String, String> missingProps = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : expectedProperties.entrySet()) {
+            if (!existingProps.contains(entry.getKey())) {
+                missingProps.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (missingProps.isEmpty()) {
+            return;
+        }
+        String alterStatement = nebulaDialect.buildAlterTagAddPropertiesStatement(tagName, missingProps);
+        log.info("Altering Nebula tag {} to add missing properties: {}", tagName, missingProps.keySet());
+        ResultSet resultSet = queryExecutor.execute(alterStatement);
+        if (resultSet == null || !resultSet.isSucceeded()) {
+            String message = resultSet != null ? resultSet.getErrorMessage() : "null result";
+            log.warn("Failed to alter tag {}: {}", tagName, message);
+        } else {
+            log.info("Altered Nebula tag {}: added {}", tagName, missingProps.keySet());
+            awaitTagPropagation(tagName);
+        }
+    }
+
+    private Set<String> describeTagProperties(NebulaGraphDialect dialect, String tagName) {
+        Set<String> properties = new LinkedHashSet<>();
+        ResultSet result = queryExecutor.execute(dialect.buildDescribeTagQuery(tagName));
+        if (result == null || !result.isSucceeded() || result.getRows() == null) {
+            return properties;
+        }
+        for (int i = 0; i < result.getRows().size(); i++) {
+            try {
+                String propName = result.rowValues(i).values().get(0).asString();
+                if (propName != null && !propName.isBlank()) {
+                    properties.add(propName);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse DESCRIBE TAG result for {}", tagName, e);
+            }
+        }
+        return properties;
     }
 
     public synchronized void ensureRegisteredEdges() {

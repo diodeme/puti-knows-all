@@ -35,4 +35,12 @@ public class GraphQueryDao {
     public Optional<GraphQueryNode> getNodeDetail(String nodeId) {
         return graphQueryRepository.findNodeById(nodeId);
     }
+
+    public List<GraphQueryNode> getEntryPoints(String projectId, String branchName) {
+        return graphQueryRepository.getEntryPoints(projectId, branchName);
+    }
+
+    public Optional<String> getContainingFilePath(String nodeId) {
+        return graphQueryRepository.getContainingFilePath(nodeId);
+    }
 }

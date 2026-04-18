@@ -92,6 +92,7 @@ public class DependencyInjectionProcessor extends BaseProcessor<CtType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             annotationNode.setContent(buildAnnotationContent(annotation, annotationValues));
             processNode(annotationNode);
@@ -132,6 +133,7 @@ public class DependencyInjectionProcessor extends BaseProcessor<CtType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             processNode(fieldNode);
             processEdge(Edge.builder()
@@ -194,6 +196,7 @@ public class DependencyInjectionProcessor extends BaseProcessor<CtType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .filePath(resolveFilePath(element))
                     .build();
             annotationNode.setContent(annotation.toString());
             processNode(annotationNode);
@@ -269,6 +272,7 @@ public class DependencyInjectionProcessor extends BaseProcessor<CtType<?>> {
                         .commitStatus("COMMITTED")
                         .lastUpdated(now())
                         .repoId(config.getProjectId())
+                        .filePath(resolveFilePath(element))
                         .build();
                 processNode(methodNode);
 
@@ -284,6 +288,7 @@ public class DependencyInjectionProcessor extends BaseProcessor<CtType<?>> {
                         .commitStatus("COMMITTED")
                         .lastUpdated(now())
                         .repoId(config.getProjectId())
+                        .filePath(resolveFilePath(element))
                         .build();
                 annotationNode.setContent(buildAnnotationContent(annotation, getAnnotationValues(annotation, element)));
                 processNode(annotationNode);

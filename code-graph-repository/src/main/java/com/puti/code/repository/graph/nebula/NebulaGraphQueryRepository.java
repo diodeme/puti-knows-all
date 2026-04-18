@@ -177,6 +177,32 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
     }
 
     @Override
+    public Optional<String> getContainingFilePath(String nodeId) {
+        String query = graphDialect.buildGetContainingFilePathQuery(nodeId);
+        ResultSet result = executeQuery(query, "get containing file path");
+        if (result == null || !result.isSucceeded()) {
+            log.warn("getContainingFilePath query failed for node {}: {}", nodeId,
+                    result != null ? result.getErrorMessage() : "null result");
+            return Optional.empty();
+        }
+        if (result.getRows() == null || result.getRows().isEmpty()) {
+            log.debug("getContainingFilePath no rows for node {}", nodeId);
+            return Optional.empty();
+        }
+        try {
+            var row = result.rowValues(0);
+            var val = row.values().get(0);
+            log.info("getContainingFilePath node={}, colCount={}, valType={}, val={}",
+                    nodeId, row.values().size(), val.getClass().getSimpleName(), val);
+            String filePath = val.asString();
+            return Optional.ofNullable(filePath);
+        } catch (Exception e) {
+            log.warn("Failed to parse file path for node {}: {}", nodeId, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    @Override
     public void close() {
         nebulaGraphClient.close();
     }

@@ -23,7 +23,7 @@ public enum NodeType {
             entry("line_start", "int64"), entry("line_end", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
             entry("last_updated", "int64"), entry("repo_id", "string"),
-            entry("is_external", "bool"), entry("content", "string")
+            entry("is_external", "bool"), entry("file_path", "string"), entry("content", "string")
     )),
     FUNCTION("function", Map.ofEntries(
             entry("name", "string"), entry("full_name", "string"), entry("visibility", "string"),
@@ -31,32 +31,32 @@ public enum NodeType {
             entry("is_entry_point", "bool"), entry("line_start", "int64"), entry("line_end", "int64"),
             entry("complexity", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
-            entry("last_updated", "int64"), entry("repo_id", "string"), entry("content", "string")
+            entry("last_updated", "int64"), entry("repo_id", "string"), entry("file_path", "string"), entry("content", "string")
     )),
     COMMENT("comment", Map.ofEntries(
             entry("type", "string"),
             entry("line_start", "int64"), entry("line_end", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
-            entry("last_updated", "int64"), entry("repo_id", "string"), entry("content", "string")
+            entry("last_updated", "int64"), entry("repo_id", "string"), entry("file_path", "string"), entry("content", "string")
     )),
     ANNOTATION("annotations", Map.ofEntries(
             entry("name", "string"), entry("full_name", "string"), entry("type", "string"),
             entry("line_start", "int64"), entry("line_end", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
-            entry("last_updated", "int64"), entry("repo_id", "string"), entry("content", "string")
+            entry("last_updated", "int64"), entry("repo_id", "string"), entry("file_path", "string"), entry("content", "string")
     )),
     MARKER_ANNOTATION("marker_annotations", Map.ofEntries(
             entry("name", "string"), entry("full_name", "string"), entry("type", "string"),
             entry("line_start", "int64"), entry("line_end", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
-            entry("last_updated", "int64"), entry("repo_id", "string"), entry("content", "string")
+            entry("last_updated", "int64"), entry("repo_id", "string"), entry("file_path", "string"), entry("content", "string")
     )),
     FIELD("field", Map.ofEntries(
             entry("name", "string"), entry("full_name", "string"), entry("type", "string"),
             entry("visibility", "string"), entry("is_static", "bool"),
             entry("line_start", "int64"), entry("line_end", "int64"),
             entry("branch_name", "string"), entry("commit_status", "string"), entry("commit_id", "string"),
-            entry("last_updated", "int64"), entry("repo_id", "string"), entry("content", "string")
+            entry("last_updated", "int64"), entry("repo_id", "string"), entry("file_path", "string"), entry("content", "string")
     )),
     ;
 

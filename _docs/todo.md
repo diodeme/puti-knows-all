@@ -8,6 +8,11 @@ feature
 完成 6.新增说明书保存表
 7.说明书向量匹配
 8.roo code 流程编排
+完成 9.语义搜索接口 (POST /api/v1/code_search) — 支持 weighted/auto/flat/per_type 四种策略
+完成 10.入口方法查询接口 (POST /api/v1/get_entry_points)
+完成 11.调用链双向查询 (POST /api/v1/nodes query_type=both)
+完成 12.file_path 属性写入所有节点类型（构建阶段直接设置）
+完成 13.Tag Schema 自动演进 (ALTER TAG ADD)
 
 
 bug fix
