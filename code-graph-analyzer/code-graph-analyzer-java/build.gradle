@@ -9,7 +9,6 @@ dependencies {
 
     // Spoon for Java code analysis
     api "fr.inria.gforge.spoon:spoon-core:${spoonVersion}"
-    api 'fr.inria.gforge.spoon:spoon-decompiler:0.1.0'
 
     // Lombok
     compileOnly "org.projectlombok:lombok:${lombokVersion}"

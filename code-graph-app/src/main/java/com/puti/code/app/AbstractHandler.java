@@ -11,6 +11,8 @@ import com.puti.code.base.util.FileTool;
 import com.puti.code.repository.graph.GraphStorageRepository;
 import com.puti.code.repository.graph.GraphStorageRepositoryFactory;
 import com.puti.code.repository.milvus.GraphVectorMilvusClient;
+import com.puti.code.app.dependency.BuildToolDetector;
+import com.puti.code.app.dependency.JdkResolver;
 import com.puti.code.rule.factory.RuleEngineFactory;
 import lombok.extern.slf4j.Slf4j;
 import spoon.Launcher;
@@ -18,7 +20,9 @@ import spoon.compiler.Environment;
 import spoon.reflect.factory.Factory;
 
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 public abstract class AbstractHandler {
@@ -71,23 +75,7 @@ public abstract class AbstractHandler {
                 // 初始化Spoon
                 Launcher launcher = new Launcher();
                 initLauncher(launcher);
-
-                // 配置Spoon环境
-                Environment environment = launcher.getEnvironment();
-                environment.setAutoImports(true);
-                environment.setCommentEnabled(true);
-                environment.setComplianceLevel(17); // Java 17
-                environment.setIgnoreDuplicateDeclarations(true);
-                environment.setIgnoreSyntaxErrors(true);
-                // 获取全局库路径
-                String globalLibraryPath = appConfig.getGlobalLibraryPath();
-                URL[] jarPaths = FileTool.getAllJarUrls(globalLibraryPath);
-//            inputClassLoader要构建影子模型，从classLoader中获取类A时，类A的依赖（B、C等）必须也都在classLoader里
-                //优先使用SourceClasspath，类加载器会有重复类定义的问题
-//            environment.setInputClassLoader(new URLClassLoader(jarPaths, null));
-//            environment.setNoClasspath(false);
-                environment.setSourceClasspath(Arrays.stream(jarPaths).map(URL::getPath).toArray(String[]::new));
-                log.info("Added {} jar files to source classpath", jarPaths.length);
+                configureSpoonEnvironment(launcher, appConfig);
 
                 // 构建模型
                 launcher.buildModel();
@@ -113,4 +101,44 @@ public abstract class AbstractHandler {
     abstract GraphContext initGraphContext(GraphContext.GraphContextBuilder graphContextBuilder);
 
     abstract void initLauncher(Launcher launcher);
+
+    protected void configureSpoonEnvironment(Launcher launcher, AppConfig appConfig) {
+        Environment environment = launcher.getEnvironment();
+        environment.setAutoImports(true);
+        environment.setCommentEnabled(true);
+        environment.setIgnoreDuplicateDeclarations(true);
+        environment.setIgnoreSyntaxErrors(true);
+
+        int complianceLevel = detectComplianceLevel(appConfig);
+        environment.setComplianceLevel(complianceLevel);
+        log.info("Spoon compliance level set to {} (project: {})", complianceLevel, appConfig.getProjectRootPath());
+
+        // 合并全局库路径和项目级 .library/ 路径到 classpath，用于 Spoon 解析类型引用
+        // inputClassLoader 方式构建影子模型时，类 A 的依赖 B、C 等也必须都在 classLoader 里，
+        // 因此优先使用 SourceClasspath（类加载器会有重复类定义的问题）
+        String globalLibraryPath = appConfig.getGlobalLibraryPath();
+        String projectLibraryPath = appConfig.getProjectRootPath() + "/.library";
+        List<URL> allJarUrls = new ArrayList<>();
+        allJarUrls.addAll(Arrays.asList(FileTool.getAllJarUrls(globalLibraryPath)));
+        allJarUrls.addAll(Arrays.asList(FileTool.getAllJarUrls(projectLibraryPath)));
+        environment.setSourceClasspath(allJarUrls.stream().map(URL::getPath).toArray(String[]::new));
+        log.info("Spoon source classpath: {} jars (global: {}, project: {})", allJarUrls.size(), globalLibraryPath, projectLibraryPath);
+    }
+
+    /**
+     * 从项目构建文件（pom.xml / build.gradle）检测 Java 版本，设置 Spoon 的合规级别。
+     * 检测不到时回退到 Java 17。
+     */
+    private int detectComplianceLevel(AppConfig appConfig) {
+        String projectRootPath = appConfig.getProjectRootPath();
+        BuildToolDetector.BuildTool buildTool = BuildToolDetector.detect(projectRootPath);
+        JdkResolver jdkResolver = new JdkResolver(appConfig.getDependencyJdkPaths());
+        int version = jdkResolver.detectRequiredVersion(projectRootPath, buildTool);
+        if (version > 0) {
+            log.info("Detected project Java version: {}, setting Spoon compliance level to {}", version, version);
+            return version;
+        }
+        log.info("Could not detect project Java version, using default compliance level 17");
+        return 17;
+    }
 }

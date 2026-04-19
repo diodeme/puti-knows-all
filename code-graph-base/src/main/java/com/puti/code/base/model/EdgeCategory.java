@@ -7,5 +7,6 @@ public enum EdgeCategory {
     STRUCTURAL,
     SEMANTIC,
     FRAMEWORK,
-    DATA_FLOW
+    DATA_FLOW,
+    DEPENDENCY
 }

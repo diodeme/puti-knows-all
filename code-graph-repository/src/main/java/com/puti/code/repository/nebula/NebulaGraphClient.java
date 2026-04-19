@@ -57,12 +57,78 @@ public class NebulaGraphClient implements AutoCloseable {
             pool.init(addresses, nebulaPoolConfig);
 
             session = pool.getSession(config.getNebulaUsername(), config.getNebulaPassword(), false);
-            session.execute(graphDialect.buildUseSpaceStatement(config.getNebulaSpace()));
+            // 确保 space 存在（DROP SPACE 后重建时需要）
+            session.execute("CREATE SPACE IF NOT EXISTS " + config.getNebulaSpace()
+                    + " (vid_type=FIXED_STRING(256), partition_num=9, replica_factor=1)");
+            // NebulaGraph CREATE SPACE 是异步传播的，需要等待 meta 节点同步完成后再 USE
+            waitForSpaceReady();
+            // USE space 并验证生效（NebulaGraph DDL 异步传播可能导致 USE 静默失败）
+            useSpaceWithRetry();
             log.info("Connected to NebulaGraph successfully");
         } catch (Exception e) {
             log.error("Failed to initialize NebulaGraph client", e);
             throw new RuntimeException("Failed to initialize NebulaGraph client", e);
         }
+    }
+
+    /**
+     * 等待 space 创建完成（NebulaGraph DDL 是异步传播的）。
+     * 轮询 SHOW SPACES 直到目标 space 出现，最多重试 10 次，每次间隔 1 秒。
+     */
+    private void waitForSpaceReady() {
+        String spaceName = config.getNebulaSpace();
+        for (int i = 0; i < 10; i++) {
+            try {
+                Thread.sleep(1000);
+                ResultSet result = session.execute("SHOW SPACES");
+                if (result.isSucceeded() && result.getRows() != null) {
+                    for (int j = 0; j < result.getRows().size(); j++) {
+                        String name = result.rowValues(j).values().get(0).asString();
+                        if (spaceName.equals(name)) {
+                            log.info("Space '{}' is ready after {}ms", spaceName, (i + 1) * 1000);
+                            return;
+                        }
+                    }
+                }
+                log.debug("Waiting for space '{}' to be created... attempt {}/10", spaceName, i + 1);
+            } catch (Exception e) {
+                log.debug("Error while waiting for space '{}': {}", spaceName, e.getMessage());
+            }
+        }
+        log.warn("Space '{}' may not be fully propagated after 10s, proceeding anyway", spaceName);
+    }
+
+    /**
+     * 执行 USE space 并验证生效。
+     * NebulaGraph DDL 异步传播可能导致 USE 虽然不报错但 space 未真正切换，
+     * 因此通过执行 SHOW TAGS 验证 space 上下文是否正确。
+     */
+    private void useSpaceWithRetry() {
+        String spaceName = config.getNebulaSpace();
+        String useStatement = graphDialect.buildUseSpaceStatement(spaceName);
+        for (int i = 0; i < 10; i++) {
+            try {
+                ResultSet useResult = session.execute(useStatement);
+                if (!useResult.isSucceeded()) {
+                    log.warn("USE {} failed: {}, retrying ({}/10)", spaceName, useResult.getErrorMessage(), i + 1);
+                    Thread.sleep(1000);
+                    continue;
+                }
+                // 验证 space 上下文：SHOW TAGS 应该成功（新 space 返回空结果也算成功）
+                ResultSet verifyResult = session.execute("SHOW TAGS");
+                if (verifyResult.isSucceeded()) {
+                    log.info("USE {} verified successfully", spaceName);
+                    return;
+                }
+                log.warn("USE {} succeeded but SHOW TAGS failed: {}, retrying ({}/10)",
+                        spaceName, verifyResult.getErrorMessage(), i + 1);
+                Thread.sleep(1000);
+            } catch (Exception e) {
+                log.warn("Error during USE {} verification ({}/10): {}", spaceName, i + 1, e.getMessage());
+                try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
+        }
+        throw new RuntimeException("Failed to USE space '" + spaceName + "' after 10 retries");
     }
 
     private List<HostAddress> parseHostAddresses(String hosts) {

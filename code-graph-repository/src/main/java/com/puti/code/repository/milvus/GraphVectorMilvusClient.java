@@ -217,11 +217,14 @@ public class GraphVectorMilvusClient implements AutoCloseable {
             JsonObject row = new JsonObject();
             row.addProperty(ID_FIELD, node.getId());
             row.add(TEXT_DENSE, Json.toJsonTree(Floats.asList(node.getVector())));
+            // content 仅对 function/field/annotation/comment 等节点有值，file/class 存空串
             row.addProperty(CONTENT, node.needRecordOriContent() ?
                     StringUtils.substring(node.getOriContent(), 0, 65535) : "");
             row.addProperty(NODE_TYPE_FIELD, node.getNodeType().getValue());
             row.addProperty(FULL_NAME_FIELD, node.getFullName());
-            row.addProperty(DIGEST, node.getVectorOriContent());
+            // digest 可能为 null（部分节点无摘要），需空值保护 + 截断到 VarChar maxLength
+            row.addProperty(DIGEST, StringUtils.substring(
+                    node.getVectorOriContent() != null ? node.getVectorOriContent() : "", 0, 65535));
             row.addProperty(CREATED_AT_FIELD, currentTimeMillis);
             row.addProperty(UPDATED_AT_FIELD, currentTimeMillis);
             row.addProperty(REPO_ID_FIELD, config.getProjectId());

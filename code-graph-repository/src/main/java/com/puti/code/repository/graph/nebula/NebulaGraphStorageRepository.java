@@ -10,6 +10,8 @@ import com.puti.code.repository.nebula.NebulaGraphClient;
 import com.puti.code.repository.nebula.NebulaGraphDialect;
 import com.puti.code.repository.nebula.NebulaSchemaManager;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,10 +19,18 @@ import java.util.Map;
 /**
  * Nebula 图存储写入实现。
  */
+@Slf4j
 public class NebulaGraphStorageRepository implements GraphStorageRepository {
 
     private final NebulaGraphClient nebulaGraphClient;
     private final GraphSchemaManager graphSchemaManager;
+
+    /**
+     * DDL 创建后等待存储节点同步的秒数。
+     * NebulaGraph DDL 是异步传播的，meta 节点确认 schema 后 storage 节点可能还未同步，
+     * 导致首批 INSERT 出现 "No schema found" 错误。
+     */
+    private static final int DDL_PROPAGATION_WAIT_SECONDS = 5;
 
     public NebulaGraphStorageRepository() {
         NebulaGraphDialect graphDialect = new NebulaGraphDialect();
@@ -30,12 +40,25 @@ public class NebulaGraphStorageRepository implements GraphStorageRepository {
                 EdgeSchemaRegistry.getInstance(),
                 graphDialect);
         this.graphSchemaManager.ensureRegisteredSchemas();
+        waitForDdlPropagation();
     }
 
     public NebulaGraphStorageRepository(NebulaGraphClient nebulaGraphClient, GraphSchemaManager graphSchemaManager) {
         this.nebulaGraphClient = nebulaGraphClient;
         this.graphSchemaManager = graphSchemaManager;
         this.graphSchemaManager.ensureRegisteredSchemas();
+        waitForDdlPropagation();
+    }
+
+    private void waitForDdlPropagation() {
+        try {
+            log.info("Waiting {} seconds for NebulaGraph DDL propagation to storage nodes...", DDL_PROPAGATION_WAIT_SECONDS);
+            Thread.sleep(DDL_PROPAGATION_WAIT_SECONDS * 1000L);
+            log.info("DDL propagation wait completed");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("DDL propagation wait interrupted");
+        }
     }
 
     @Override

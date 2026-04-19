@@ -44,7 +44,7 @@ subprojects {
 
 // 版本管理
 ext {
-    spoonVersion = '11.2.1'
+    spoonVersion = '11.3.0'
     nebulaVersion = '3.6.0'
     mapstructVersion = '1.5.5.Final'
     milvusVersion = '2.5.10'

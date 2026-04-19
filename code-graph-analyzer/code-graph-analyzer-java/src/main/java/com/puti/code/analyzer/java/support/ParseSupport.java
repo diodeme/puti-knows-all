@@ -6,9 +6,13 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtParameter;
 import spoon.reflect.reference.CtTypeReference;
 
+import java.lang.IncompatibleClassChangeError;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class ParseSupport {
     public static boolean isSimpleGetter(CtExecutable<?> method) {
         if (method == null || method.getBody() == null) {
@@ -83,7 +87,15 @@ public class ParseSupport {
     }
 
     public static boolean isIgnoreType(CtTypeReference<?> typeReference){
-        return typeReference == null || typeReference.getTypeDeclaration() == null || typeReference.isPrimitive() || JdkClassChecker.isJdkClass(typeReference);
+        if (typeReference == null || typeReference.isPrimitive()) {
+            return true;
+        }
+        try {
+            return typeReference.getTypeDeclaration() == null || JdkClassChecker.isJdkClass(typeReference);
+        } catch (Exception | IncompatibleClassChangeError e) {
+            log.debug("Ignoring type due to shadow class build failure: {} - {}", typeReference.getQualifiedName(), e.getClass().getSimpleName());
+            return true;
+        }
     }
 
     public static void genMethodContent(StringBuilder content, CtMethod<?> method){

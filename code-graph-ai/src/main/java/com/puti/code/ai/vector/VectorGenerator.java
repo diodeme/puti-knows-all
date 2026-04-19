@@ -18,11 +18,15 @@ import org.apache.http.util.EntityUtils;
 import java.io.IOException;
 
 /**
- * OpenAI向量生成器
+ * 向量生成器，调用 Embedding API 将文本转为向量。
+ * 输入文本超过 {@link #MAX_INPUT_LENGTH} 时自动截断，避免 API 返回 413 token 超限错误。
  */
 @Slf4j
 public class VectorGenerator implements AutoCloseable {
-    
+
+    /** Embedding API 单次请求最大输入字符数（8192 token 的保守上界） */
+    private static final int MAX_INPUT_LENGTH = 8000;
+
     private final AppConfig config;
     private final CloseableHttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -34,8 +38,8 @@ public class VectorGenerator implements AutoCloseable {
     }
 
     /**
-     * 生成文本向量
-     * 
+     * 生成文本向量，输入超过 {@link #MAX_INPUT_LENGTH} 时自动截断。
+     *
      * @param text 文本
      * @return 向量
      */
@@ -45,6 +49,9 @@ public class VectorGenerator implements AutoCloseable {
             return new float[config.getMilvusDimension()];
         }
 
+        if (text.length() > MAX_INPUT_LENGTH) {
+            text = text.substring(0, MAX_INPUT_LENGTH);
+        }
 
         try {
             // 3. 创建 HttpPost 请求

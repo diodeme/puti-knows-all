@@ -56,6 +56,12 @@ public class AppConfig {
     private String globalLibraryPath;
     private String globalDecompileOutputPath;
 
+    // 依赖自动解析配置
+    private boolean dependencyAutoResolve;
+    private int dependencyTimeoutMinutes;
+    private List<String> dependencyJdkPaths;
+    private List<String> dependencyExcludeGroups;
+
     // 项目配置
     private String projectRootPath;
     private String projectId;
@@ -153,6 +159,11 @@ public class AppConfig {
 
             globalLibraryPath = properties.getProperty("global.library_path");
             globalDecompileOutputPath = properties.getProperty("global.decompile_output_path");
+
+            dependencyAutoResolve = Boolean.parseBoolean(properties.getProperty("dependency.auto_resolve", "true"));
+            dependencyTimeoutMinutes = Integer.parseInt(properties.getProperty("dependency.timeout_minutes", "30"));
+            dependencyJdkPaths = parseListProperty(properties.getProperty("dependency.jdk_paths"), List.of());
+            dependencyExcludeGroups = parseListProperty(properties.getProperty("dependency.exclude.groups"), List.of());
 
             // 加载项目配置
             projectRootPath = properties.getProperty("project.root_path");

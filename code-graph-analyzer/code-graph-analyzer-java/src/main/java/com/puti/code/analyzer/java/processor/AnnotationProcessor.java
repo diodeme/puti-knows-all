@@ -1,6 +1,7 @@
 package com.puti.code.analyzer.java.processor;
 
 import com.puti.code.analyzer.java.context.GraphContext;
+import com.puti.code.base.enums.ParseType;
 import com.puti.code.base.model.ClassNode;
 import com.puti.code.base.model.NodeType;
 import com.puti.code.base.util.IdGenerator;
@@ -61,6 +62,7 @@ public class AnnotationProcessor extends BaseProcessor<CtAnnotationType<?>> {
                     .commitStatus("COMMITTED")
                     .lastUpdated(now())
                     .repoId(config.getProjectId())
+                    .isLibrary(ParseType.LIBRARY.equals(parseType))
                     .isExternal(false)
                     .filePath(resolveFilePath(element))
                     .build();
