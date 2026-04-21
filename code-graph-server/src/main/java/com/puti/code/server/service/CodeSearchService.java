@@ -48,8 +48,8 @@ public class CodeSearchService {
         // 1. 生成查询向量
         float[] queryVector = vectorGenerator.generateVector(request.getQuery());
 
-        // 2. 向量搜索，取 topK * 3 候选集
-        int candidateSize = topK * 3;
+        // 2. 向量搜索，取 topK * 10 候选集（大候选集保证类型多样性，避免单一类型占满）
+        int candidateSize = Math.max(topK * 10, 100);
         List<MilvusSearchClient.MilvusSearchResult> candidates = milvusSearchClient.search(queryVector, candidateSize);
 
         // 3. 应用策略筛选 topK 条
