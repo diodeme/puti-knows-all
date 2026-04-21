@@ -31,14 +31,14 @@ public class CodeSearchService {
     private final VectorGenerator vectorGenerator;
     private final GraphQueryDao graphQueryDao;
 
-    private static final Map<String, Float> DEFAULT_TYPE_WEIGHTS = Map.of(
-            "function", 1.0f,
-            "class", 0.8f,
-            "comment", 0.4f,
-            "field", 0.6f,
-            "annotation", 0.2f,
-            "marker_annotation", 0.2f,
-            "file", 0.1f
+    private static final Map<String, Float> DEFAULT_TYPE_WEIGHTS = Map.ofEntries(
+            Map.entry("function", 1.0f),
+            Map.entry("class", 0.8f),
+            Map.entry("field", 0.6f),
+            Map.entry("comment", 0.4f),
+            Map.entry("annotations", 0.2f),
+            Map.entry("marker_annotations", 0.2f),
+            Map.entry("file", 0.1f)
     );
 
     public CodeSearchData search(CodeSearchRequest request) {
@@ -152,8 +152,8 @@ public class CodeSearchService {
             Map<String, Float> weights) {
         return candidates.stream()
                 .sorted((a, b) -> {
-                    float scoreA = a.getScore() * weights.getOrDefault(a.getNodeType(), 0.5f);
-                    float scoreB = b.getScore() * weights.getOrDefault(b.getNodeType(), 0.5f);
+                    float scoreA = a.getScore() * weights.getOrDefault(a.getNodeType(), 0.1f);
+                    float scoreB = b.getScore() * weights.getOrDefault(b.getNodeType(), 0.1f);
                     return Float.compare(scoreB, scoreA);
                 })
                 .limit(topK)
