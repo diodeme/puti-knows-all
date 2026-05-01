@@ -1,0 +1,133 @@
+{
+  "nav": {
+    "overview": "概览",
+    "explore": "探索",
+    "docs": "文档"
+  },
+  "theme": {
+    "light": "切换浅色",
+    "dark": "切换深色"
+  },
+  "common": {
+    "loading": "加载中...",
+    "noData": "暂无数据",
+    "clear": "清除"
+  },
+  "error": {
+    "requestFailed": "请求失败"
+  },
+  "overview": {
+    "title": "知识图谱概览",
+    "stats": {
+      "nodes": "节点",
+      "edges": "边",
+      "entryPoints": "入口方法",
+      "repos": "仓库"
+    },
+    "entryPoints": "入口方法",
+    "noEntryPoints": "暂无入口方法数据",
+    "viewAll": "查看全部 {count} 个",
+    "typeDistribution": "节点类型分布",
+    "recentSearches": "最近搜索",
+    "timeAgo": {
+      "justNow": "刚刚",
+      "minutesAgo": "{n} 分钟前",
+      "hoursAgo": "{n} 小时前",
+      "daysAgo": "{n} 天前"
+    }
+  },
+  "explore": {
+    "emptyTip": "搜索方法或选择入口方法开始探索",
+    "clickNodeTip": "点击节点查看详情"
+  },
+  "search": {
+    "placeholder": "搜索方法名...",
+    "searching": "搜索中...",
+    "currentMethod": "当前方法",
+    "direction": "遍历方向",
+    "pathDepth": "路径深度:",
+    "upstream": "上游",
+    "downstream": "下游",
+    "both": "双向",
+    "all": "全部",
+    "depthLevel": "{n}级",
+    "depthDirect": "1级（直接关联）"
+  },
+  "detail": {
+    "title": "节点详情",
+    "sourceCode": "源码",
+    "noSourceCode": "无源码内容",
+    "properties": "属性",
+    "lineRange": "行范围",
+    "complexity": "复杂度",
+    "repo": "仓库",
+    "branch": "分支",
+    "library": "依赖库",
+    "visibility": {
+      "public": "public",
+      "private": "private",
+      "protected": "protected"
+    }
+  },
+  "entryPoints": {
+    "title": "入口方法",
+    "noData": "暂无入口方法"
+  },
+  "filter": {
+    "title": "过滤器",
+    "nodeTypes": "节点类型",
+    "edgeTypes": "边类型"
+  },
+  "graph": {
+    "loading": "加载图谱中...",
+    "legend": "图例",
+    "showLegend": "显示图例",
+    "locateCenter": "定位中心节点",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetView": "重置视图"
+  },
+  "status": {
+    "nodes": "节点:",
+    "edges": "边:",
+    "query": "查询:",
+    "zoom": "缩放:",
+    "hint": "双击聚焦 · 滚轮缩放 · 拖拽平移"
+  },
+  "docs": {
+    "title": "使用说明书",
+    "description": "选择项目并浏览说明书文档",
+    "selectProject": "选择项目",
+    "selectPlaceholder": "请选择项目",
+    "noDocs": "暂无说明书"
+  },
+  "nodeType": {
+    "function": "方法",
+    "class": "类",
+    "field": "字段",
+    "annotation": "注解",
+    "marker_annotation": "标记注解",
+    "comment": "注释",
+    "file": "文件",
+    "entryMethod": "入口方法",
+    "libraryNode": "依赖库节点"
+  },
+  "edgeType": {
+    "calls": "调用",
+    "implemented_by": "实现",
+    "overridden_by": "重写",
+    "injection_calls": "注入",
+    "contains": "包含",
+    "depends_on": "依赖",
+    "out_calls": "外调",
+    "super_calls": "父类调用",
+    "interface_calls": "接口调用",
+    "subtype_calls": "子类调用",
+    "documented_by": "文档",
+    "instance_of": "实例",
+    "reads_field": "读字段",
+    "writes_field": "写字段",
+    "maps_to": "映射",
+    "passes_to": "透传"
+  }
+}

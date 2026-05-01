@@ -227,11 +227,21 @@ public class NebulaGraphDialect implements GraphDialect {
 
     @Override
     public String buildGetEntryPointsQuery(String projectId, String branchName) {
-        return String.format("""
-                MATCH (v:function{is_entry_point:TRUE})
-                WHERE v.function.repo_id == \"%s\" AND v.function.branch_name == \"%s\"
-                RETURN v
-                """, escapeString(projectId), escapeString(branchName));
+        if (projectId != null && !projectId.isBlank() && branchName != null && !branchName.isBlank()) {
+            return String.format("""
+                    MATCH (v:function{is_entry_point:TRUE})
+                    WHERE v.function.repo_id == \"%s\" AND v.function.branch_name == \"%s\"
+                    RETURN v
+                    """, escapeString(projectId), escapeString(branchName));
+        }
+        if (projectId != null && !projectId.isBlank()) {
+            return String.format("""
+                    MATCH (v:function{is_entry_point:TRUE})
+                    WHERE v.function.repo_id == \"%s\"
+                    RETURN v
+                    """, escapeString(projectId));
+        }
+        return "MATCH (v:function{is_entry_point:TRUE}) RETURN v";
     }
 
     @Override

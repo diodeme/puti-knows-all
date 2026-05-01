@@ -7,6 +7,7 @@ import com.puti.code.base.model.EdgeSchema;
 import com.puti.code.base.model.EdgeSchemaRegistry;
 import com.puti.code.repository.graph.dialect.GraphDialect;
 import com.puti.code.repository.graph.query.GraphDirection;
+import com.puti.code.repository.graph.query.GraphGlobalStats;
 import com.puti.code.repository.graph.query.GraphQueryEdge;
 import com.puti.code.repository.graph.query.GraphQueryNode;
 import com.puti.code.repository.graph.query.GraphQueryRepository;
@@ -26,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Nebula 图查询实现。
@@ -154,9 +157,11 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
                 GraphQueryNode node = toQueryNode(result.rowValues(i).values().get(0).asNode());
                 if (node != null) {
                     nodes.add(node);
+                } else {
+                    log.warn("Entry point row {} resolved to null (VID or tag issue)", i);
                 }
             } catch (Exception e) {
-                log.debug("Failed to parse entry point row {}", i, e);
+                log.warn("Failed to parse entry point row {}: {}", i, e.getMessage());
             }
         }
         return nodes;
@@ -172,6 +177,146 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
             return result.rowValues(0).values().get(0).asLong();
         } catch (Exception e) {
             log.debug("Failed to parse entry point count", e);
+            return 0L;
+        }
+    }
+
+    @Override
+    public GraphGlobalStats getGlobalStats() {
+        // Try SHOW STATS first (fast, uses pre-computed stats)
+        GraphGlobalStats stats = tryShowStats();
+        if (stats != null) {
+            return stats;
+        }
+
+        // Fallback: submit stats job then retry
+        executeQuery("SUBMIT JOB STATS", "submit stats job");
+        // Wait for job to process
+        try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        stats = tryShowStats();
+        if (stats != null) {
+            return stats;
+        }
+
+        // Last resort: individual count queries
+        return countByIndividualQueries();
+    }
+
+    private GraphGlobalStats tryShowStats() {
+        ResultSet result = executeQuery("SHOW STATS", "show stats");
+        if (result == null || !result.isSucceeded() || result.getRows() == null) {
+            return null;
+        }
+
+        Map<String, Long> nodeTypeStats = new LinkedHashMap<>();
+        Map<String, Long> edgeTypeStats = new LinkedHashMap<>();
+        long totalNodes = 0;
+        long totalEdges = 0;
+        boolean hasData = false;
+
+        for (int i = 0; i < result.getRows().size(); i++) {
+            try {
+                String type = result.rowValues(i).values().get(0).asString();
+                String name = result.rowValues(i).values().get(1).asString();
+                long count = result.rowValues(i).values().get(2).asLong();
+                if ("Tag".equals(type) || "tag".equalsIgnoreCase(type)) {
+                    nodeTypeStats.put(name, count);
+                    totalNodes += count;
+                    if (count > 0) hasData = true;
+                } else if ("Edge".equals(type) || "edge".equalsIgnoreCase(type)) {
+                    edgeTypeStats.put(name, count);
+                    totalEdges += count;
+                }
+            } catch (Exception e) {
+                log.debug("Failed to parse SHOW STATS row {}", i, e);
+            }
+        }
+
+        if (!hasData) {
+            return null;
+        }
+
+        return GraphGlobalStats.builder()
+                .totalNodes(totalNodes)
+                .totalEdges(totalEdges)
+                .nodeTypeStats(nodeTypeStats)
+                .edgeTypeStats(edgeTypeStats)
+                .entryPointCount(countEntryPoints())
+                .build();
+    }
+
+    private GraphGlobalStats countByIndividualQueries() {
+        List<String> tagNames = loadTagNames();
+        List<String> edgeTypeNames = resolveSubgraphEdgeTypes();
+
+        Map<String, Long> nodeTypeStats = new LinkedHashMap<>();
+        long totalNodes = 0;
+        for (String tag : tagNames) {
+            long count = countByTag(tag);
+            nodeTypeStats.put(tag, count);
+            totalNodes += count;
+        }
+
+        Map<String, Long> edgeTypeStats = new LinkedHashMap<>();
+        long totalEdges = 0;
+        for (String edgeType : edgeTypeNames) {
+            long count = countByEdgeType(edgeType);
+            edgeTypeStats.put(edgeType, count);
+            totalEdges += count;
+        }
+
+        return GraphGlobalStats.builder()
+                .totalNodes(totalNodes)
+                .totalEdges(totalEdges)
+                .nodeTypeStats(nodeTypeStats)
+                .edgeTypeStats(edgeTypeStats)
+                .entryPointCount(countEntryPoints())
+                .build();
+    }
+
+    private List<String> loadTagNames() {
+        ResultSet resultSet = executeQuery("SHOW TAGS", "load tag names");
+        if (resultSet == null || !resultSet.isSucceeded() || resultSet.getRows() == null) {
+            return List.of();
+        }
+        List<String> tags = new ArrayList<>();
+        for (int i = 0; i < resultSet.getRows().size(); i++) {
+            try {
+                String tagName = resultSet.rowValues(i).values().get(0).asString();
+                if (tagName != null && !tagName.isBlank()) {
+                    tags.add(tagName);
+                }
+            } catch (Exception e) {
+                log.debug("Failed to parse tag name from SHOW TAGS row {}", i, e);
+            }
+        }
+        return tags;
+    }
+
+    private long countByTag(String tagName) {
+        String query = String.format("MATCH (v:`%s`) RETURN count(v) AS cnt", tagName);
+        ResultSet result = executeQuery(query, "count nodes by tag " + tagName);
+        if (result == null || !result.isSucceeded() || result.getRows() == null || result.getRows().isEmpty()) {
+            return 0L;
+        }
+        try {
+            return result.rowValues(0).values().get(0).asLong();
+        } catch (Exception e) {
+            log.debug("Failed to parse count for tag {}", tagName, e);
+            return 0L;
+        }
+    }
+
+    private long countByEdgeType(String edgeType) {
+        String query = String.format("MATCH ()-[e:`%s`]->() RETURN count(e) AS cnt", edgeType);
+        ResultSet result = executeQuery(query, "count edges by type " + edgeType);
+        if (result == null || !result.isSucceeded() || result.getRows() == null || result.getRows().isEmpty()) {
+            return 0L;
+        }
+        try {
+            return result.rowValues(0).values().get(0).asLong();
+        } catch (Exception e) {
+            log.debug("Failed to parse count for edge type {}", edgeType, e);
             return 0L;
         }
     }
@@ -227,7 +372,11 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
         try {
             vertexId = vertex.getId().asString();
         } catch (Exception e) {
-            return null;
+            try {
+                vertexId = String.valueOf(vertex.getId().asLong());
+            } catch (Exception e2) {
+                vertexId = vertex.getId().toString();
+            }
         }
         String primaryTag = resolvePrimaryTag(vertex);
         if (primaryTag == null) {

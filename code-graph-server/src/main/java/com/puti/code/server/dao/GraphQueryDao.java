@@ -1,6 +1,7 @@
 package com.puti.code.server.dao;
 
 import com.puti.code.repository.graph.query.GraphDirection;
+import com.puti.code.repository.graph.query.GraphGlobalStats;
 import com.puti.code.repository.graph.query.GraphQueryNode;
 import com.puti.code.repository.graph.query.GraphQueryRepository;
 import com.puti.code.repository.graph.query.GraphQuerySubgraph;
@@ -42,5 +43,9 @@ public class GraphQueryDao {
 
     public Optional<String> getContainingFilePath(String nodeId) {
         return graphQueryRepository.getContainingFilePath(nodeId);
+    }
+
+    public GraphGlobalStats getGlobalStats() {
+        return graphQueryRepository.getGlobalStats();
     }
 }

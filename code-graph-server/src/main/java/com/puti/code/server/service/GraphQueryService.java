@@ -1,5 +1,6 @@
 package com.puti.code.server.service;
 
+import com.puti.code.base.config.AppConfig;
 import com.puti.code.base.model.EdgeCategory;
 import com.puti.code.base.model.EdgeDefinition;
 import com.puti.code.base.model.EdgeDefinitionResolver;
@@ -8,11 +9,13 @@ import com.puti.code.server.dao.GraphQueryDao;
 import com.puti.code.server.dto.GraphEdge;
 import com.puti.code.server.dto.GraphNode;
 import com.puti.code.server.dto.GraphResponseMeta;
+import com.puti.code.server.dto.GraphStatsResponse;
 import com.puti.code.server.dto.MethodSearchResult;
 import com.puti.code.server.dto.NodeDetail;
 import com.puti.code.server.dto.NodeRequest;
 import com.puti.code.server.dto.NodeResponse;
 import com.puti.code.server.mapper.GraphQueryMapper;
+import com.puti.code.repository.graph.query.GraphGlobalStats;
 import com.puti.code.repository.graph.query.GraphQueryEdge;
 import com.puti.code.repository.graph.query.GraphQueryNode;
 import com.puti.code.repository.graph.query.GraphQuerySubgraph;
@@ -186,6 +189,22 @@ public class GraphQueryService {
         return graphQueryDao.getNodeDetail(nodeId)
                 .map(this::toNodeDetail)
                 .orElse(null);
+    }
+
+    public GraphStatsResponse getGlobalStats() {
+        GraphGlobalStats stats = graphQueryDao.getGlobalStats();
+        // Use the same filtered query as getEntryPoints to ensure count consistency
+        long entryPointCount = graphQueryDao.getEntryPoints(
+                AppConfig.getInstance().getProjectId(),
+                AppConfig.getInstance().getBranch()).size();
+        GraphStatsResponse response = new GraphStatsResponse();
+        response.setTotalNodes(stats.getTotalNodes());
+        response.setTotalEdges(stats.getTotalEdges());
+        response.setNodeTypeStats(stats.getNodeTypeStats());
+        response.setEdgeTypeStats(stats.getEdgeTypeStats());
+        response.setEntryPointCount(entryPointCount);
+        response.setRepoCount(1);
+        return response;
     }
 
     private NodeResponse emptyNodeResponse() {

@@ -1,0 +1,128 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "explore": "Explore",
+    "docs": "Docs"
+  },
+  "theme": {
+    "light": "Switch to light",
+    "dark": "Switch to dark"
+  },
+  "common": {
+    "loading": "Loading...",
+    "noData": "No data",
+    "clear": "Clear"
+  },
+  "error": {
+    "requestFailed": "Request failed"
+  },
+  "overview": {
+    "title": "Knowledge Graph Overview",
+    "stats": {
+      "nodes": "Nodes",
+      "edges": "Edges",
+      "entryPoints": "Entry Points",
+      "repos": "Repos"
+    },
+    "entryPoints": "Entry Points",
+    "noEntryPoints": "No entry point data",
+    "viewAll": "View all {count}",
+    "typeDistribution": "Node Type Distribution",
+    "recentSearches": "Recent Searches",
+    "timeAgo": {
+      "justNow": "Just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n} hr ago",
+      "daysAgo": "{n} days ago"
+    }
+  },
+  "explore": {
+    "emptyTip": "Search a method or select an entry point to explore",
+    "clickNodeTip": "Click a node to view details"
+  },
+  "search": {
+    "placeholder": "Search method name...",
+    "searching": "Searching...",
+    "currentMethod": "Current Method",
+    "direction": "Direction",
+    "pathDepth": "Depth:",
+    "upstream": "Upstream",
+    "downstream": "Downstream",
+    "both": "Both",
+    "all": "All",
+    "depthLevel": "Level {n}",
+    "depthDirect": "Level 1 (direct)"
+  },
+  "detail": {
+    "title": "Node Detail",
+    "sourceCode": "Source Code",
+    "noSourceCode": "No source code",
+    "properties": "Properties",
+    "lineRange": "Line Range",
+    "complexity": "Complexity",
+    "repo": "Repo",
+    "branch": "Branch",
+    "library": "Library"
+  },
+  "entryPoints": {
+    "title": "Entry Points",
+    "noData": "No entry points"
+  },
+  "filter": {
+    "title": "Filters",
+    "nodeTypes": "Node Types",
+    "edgeTypes": "Edge Types"
+  },
+  "graph": {
+    "loading": "Loading graph...",
+    "legend": "Legend",
+    "showLegend": "Show legend",
+    "locateCenter": "Locate center",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view"
+  },
+  "status": {
+    "nodes": "Nodes:",
+    "edges": "Edges:",
+    "query": "Query:",
+    "zoom": "Zoom:",
+    "hint": "Double-click focus · Scroll zoom · Drag pan"
+  },
+  "docs": {
+    "title": "Documentation",
+    "description": "Select a project to browse documentation",
+    "selectProject": "Select Project",
+    "selectPlaceholder": "Select a project",
+    "noDocs": "No documentation"
+  },
+  "nodeType": {
+    "function": "Function",
+    "class": "Class",
+    "field": "Field",
+    "annotation": "Annotation",
+    "marker_annotation": "Marker",
+    "comment": "Comment",
+    "file": "File",
+    "entryMethod": "Entry Point",
+    "libraryNode": "Library Node"
+  },
+  "edgeType": {
+    "calls": "Calls",
+    "implemented_by": "Implements",
+    "overridden_by": "Overrides",
+    "injection_calls": "Injection",
+    "contains": "Contains",
+    "depends_on": "Depends",
+    "out_calls": "External",
+    "super_calls": "Super Call",
+    "interface_calls": "Interface Call",
+    "subtype_calls": "Subtype Call",
+    "documented_by": "Documented",
+    "instance_of": "Instance Of",
+    "reads_field": "Reads Field",
+    "writes_field": "Writes Field",
+    "maps_to": "Maps To",
+    "passes_to": "Passes To"
+  }
+}

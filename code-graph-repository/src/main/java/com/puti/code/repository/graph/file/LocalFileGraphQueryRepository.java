@@ -1,6 +1,7 @@
 package com.puti.code.repository.graph.file;
 
 import com.puti.code.repository.graph.query.GraphDirection;
+import com.puti.code.repository.graph.query.GraphGlobalStats;
 import com.puti.code.repository.graph.query.GraphQueryEdge;
 import com.puti.code.repository.graph.query.GraphQueryNode;
 import com.puti.code.repository.graph.query.GraphQueryRepository;
@@ -141,6 +142,25 @@ public class LocalFileGraphQueryRepository implements GraphQueryRepository {
     @Override
     public Optional<String> getContainingFilePath(String nodeId) {
         return Optional.empty();
+    }
+
+    @Override
+    public GraphGlobalStats getGlobalStats() {
+        LocalFileGraphSnapshot snapshot = graphStore.snapshot();
+        Map<String, Long> nodeTypeStats = new LinkedHashMap<>();
+        long totalNodes = 0;
+        for (var entry : snapshot.getNodesById().entrySet()) {
+            String tag = entry.getValue().getTag();
+            nodeTypeStats.merge(tag != null ? tag : "unknown", 1L, Long::sum);
+            totalNodes++;
+        }
+        return GraphGlobalStats.builder()
+                .totalNodes(totalNodes)
+                .totalEdges(0)
+                .nodeTypeStats(nodeTypeStats)
+                .edgeTypeStats(Map.of())
+                .entryPointCount(countEntryPoints())
+                .build();
     }
 
     private List<LocalFileGraphEdgeRecord> resolveEdges(LocalFileGraphSnapshot snapshot, String nodeId, GraphDirection direction) {

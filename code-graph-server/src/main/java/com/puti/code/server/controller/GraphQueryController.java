@@ -1,6 +1,7 @@
 package com.puti.code.server.controller;
 
 import com.puti.code.server.dto.ApiResponse;
+import com.puti.code.server.dto.GraphStatsResponse;
 import com.puti.code.server.dto.MethodSearchRequest;
 import com.puti.code.server.dto.MethodSearchResult;
 import com.puti.code.server.dto.NodeDetail;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -64,6 +66,18 @@ public class GraphQueryController {
             return ResponseEntity.ok(detail);
         } catch (Exception e) {
             log.error("Failed to get node detail", e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<?> getGlobalStats() {
+        log.info("Get global graph stats");
+        try {
+            GraphStatsResponse stats = graphQueryService.getGlobalStats();
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            log.error("Failed to get global stats", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error(e.getMessage()));
         }
     }
