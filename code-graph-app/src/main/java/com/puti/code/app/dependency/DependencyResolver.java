@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,9 @@ public class DependencyResolver {
 
     private final CommandRunner commandRunner;
     private final JdkResolver jdkResolver;
+
+    /** 最近一次过滤被排除的 JAR 文件，用于过滤后删除 */
+    private List<File> lastExcludedJars = List.of();
 
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
@@ -97,34 +101,90 @@ public class DependencyResolver {
             }
         };
 
-        return filterExcluded(result);
+        result = filterDependencies(result);
+        deleteExcludedJars();
+        return result;
     }
 
     /**
-     * 按 groupId 前缀排除通用框架库。
-     * 这些库 LLM 已充分了解，无需入库，排除可大幅减少分析时间和存储开销。
+     * 根据 filter_mode 过滤依赖，并收集被排除的 JAR 文件以供后续删除。
+     * blacklist: 排除匹配 exclude.groups 的依赖
+     * whitelist: 仅保留匹配 include.groups 的依赖
      */
-    private Map<String, File> filterExcluded(Map<String, File> gavToJar) {
+    private Map<String, File> filterDependencies(Map<String, File> gavToJar) {
+        String mode = AppConfig.getInstance().getDependencyFilterMode();
+        if ("whitelist".equalsIgnoreCase(mode)) {
+            return filterByWhitelist(gavToJar);
+        }
+        if (!"blacklist".equalsIgnoreCase(mode)) {
+            log.warn("Unknown dependency.filter_mode '{}', falling back to blacklist", mode);
+        }
+        return filterByBlacklist(gavToJar);
+    }
+
+    private Map<String, File> filterByBlacklist(Map<String, File> gavToJar) {
         List<String> excludeGroups = AppConfig.getInstance().getDependencyExcludeGroups();
         if (excludeGroups == null || excludeGroups.isEmpty()) {
+            lastExcludedJars = List.of();
             return gavToJar;
         }
         Map<String, File> filtered = new LinkedHashMap<>();
-        int excluded = 0;
+        List<File> excludedJars = new ArrayList<>();
         for (Map.Entry<String, File> entry : gavToJar.entrySet()) {
-            String gav = entry.getKey();
-            String groupId = gav.substring(0, gav.indexOf(':'));
+            String groupId = entry.getKey().substring(0, entry.getKey().indexOf(':'));
             if (excludeGroups.stream().anyMatch(groupId::startsWith)) {
-                excluded++;
+                excludedJars.add(entry.getValue());
+                log.debug("Excluded by blacklist: {}", entry.getKey());
                 continue;
             }
             filtered.put(entry.getKey(), entry.getValue());
         }
-        if (excluded > 0) {
-            log.info("Excluded {} / {} dependencies by group filter ({} groups)",
-                    excluded, gavToJar.size(), excludeGroups.size());
+        lastExcludedJars = excludedJars;
+        if (!excludedJars.isEmpty()) {
+            log.info("Excluded {} / {} dependencies by blacklist ({} groups)",
+                    excludedJars.size(), gavToJar.size(), excludeGroups.size());
         }
         return filtered;
+    }
+
+    private Map<String, File> filterByWhitelist(Map<String, File> gavToJar) {
+        List<String> includeGroups = AppConfig.getInstance().getDependencyIncludeGroups();
+        if (includeGroups == null || includeGroups.isEmpty()) {
+            lastExcludedJars = new ArrayList<>(gavToJar.values());
+            log.info("Whitelist mode but no include.groups configured, skipping all {} dependencies", gavToJar.size());
+            return Map.of();
+        }
+        Map<String, File> filtered = new LinkedHashMap<>();
+        List<File> excludedJars = new ArrayList<>();
+        for (Map.Entry<String, File> entry : gavToJar.entrySet()) {
+            String groupId = entry.getKey().substring(0, entry.getKey().indexOf(':'));
+            if (includeGroups.stream().anyMatch(groupId::startsWith)) {
+                filtered.put(entry.getKey(), entry.getValue());
+            } else {
+                excludedJars.add(entry.getValue());
+                log.debug("Excluded by whitelist: {}", entry.getKey());
+            }
+        }
+        lastExcludedJars = excludedJars;
+        if (!excludedJars.isEmpty()) {
+            log.info("Whitelist kept {} / {} dependencies ({} groups), excluded {}",
+                    filtered.size(), gavToJar.size(), includeGroups.size(), excludedJars.size());
+        }
+        return filtered;
+    }
+
+    private void deleteExcludedJars() {
+        if (lastExcludedJars.isEmpty()) return;
+        int deleted = 0;
+        for (File jar : lastExcludedJars) {
+            try {
+                if (Files.deleteIfExists(jar.toPath())) deleted++;
+            } catch (IOException e) {
+                log.warn("Failed to delete excluded JAR: {}", jar.getName(), e);
+            }
+        }
+        log.info("Deleted {}/{} excluded JAR files from .library/", deleted, lastExcludedJars.size());
+        lastExcludedJars = List.of();
     }
 
     // ======================== Maven ========================

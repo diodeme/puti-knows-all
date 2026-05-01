@@ -60,7 +60,9 @@ public class AppConfig {
     private boolean dependencyAutoResolve;
     private int dependencyTimeoutMinutes;
     private List<String> dependencyJdkPaths;
+    private String dependencyFilterMode;
     private List<String> dependencyExcludeGroups;
+    private List<String> dependencyIncludeGroups;
 
     // 项目配置
     private String projectRootPath;
@@ -163,7 +165,9 @@ public class AppConfig {
             dependencyAutoResolve = Boolean.parseBoolean(properties.getProperty("dependency.auto_resolve", "true"));
             dependencyTimeoutMinutes = Integer.parseInt(properties.getProperty("dependency.timeout_minutes", "30"));
             dependencyJdkPaths = parseListProperty(properties.getProperty("dependency.jdk_paths"), List.of());
+            dependencyFilterMode = properties.getProperty("dependency.filter_mode", "blacklist");
             dependencyExcludeGroups = parseListProperty(properties.getProperty("dependency.exclude.groups"), List.of());
+            dependencyIncludeGroups = parseListProperty(properties.getProperty("dependency.include.groups"), List.of());
 
             // 加载项目配置
             projectRootPath = properties.getProperty("project.root_path");
