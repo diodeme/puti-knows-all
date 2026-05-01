@@ -59,7 +59,7 @@ public class ProjectHandler extends AbstractHandler {
         }
 
         // Phase 2: 清理反编译产物，避免 Spoon 扫描到 .library/output/ 中的依赖源码
-        cleanDecompileOutput(appConfig.getProjectRootPath() + "/.library/output");
+        cleanDecompileOutput(Path.of(appConfig.getProjectRootPath(), ".library", "output").toString());
 
         // Phase 3: 分析项目源码（Spoon 解析 → 语义 pipeline → 写入 NebulaGraph/Milvus）
         log.info("[Project] Starting project source code analysis");
@@ -123,8 +123,8 @@ public class ProjectHandler extends AbstractHandler {
 
             if (!jarsToProcess.isEmpty()) {
                 log.info("[Project] Processing {} new/changed dependencies", jarsToProcess.size());
-                String libraryPath = projectRootPath + "/.library";
-                String decompileOutputPath = libraryPath + "/output";
+                String libraryPath = Path.of(projectRootPath, ".library").toString();
+                String decompileOutputPath = Path.of(projectRootPath, ".library", "output").toString();
                 LibraryHandler libraryHandler = new LibraryHandler(libraryPath, decompileOutputPath, jarsToProcess);
                 libraryHandler.handle();
                 log.info("[Project] Library analysis completed for {} JARs", jarsToProcess.size());

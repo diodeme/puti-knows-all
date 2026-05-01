@@ -31,6 +31,23 @@ public class DependencyResolver {
     private final CommandRunner commandRunner;
     private final JdkResolver jdkResolver;
 
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    /**
+     * Windows 下 Maven 需要 cmd /c 前缀才能正确执行 mvn.cmd。
+     * Linux/macOS 直接传递原数组。
+     */
+    private String[] mavenCommand(String... args) {
+        if (!isWindows()) return args;
+        String[] result = new String[args.length + 2];
+        result[0] = "cmd";
+        result[1] = "/c";
+        System.arraycopy(args, 0, result, 2, args.length);
+        return result;
+    }
+
     public DependencyResolver(long timeoutMinutes, JdkResolver jdkResolver) {
         this.commandRunner = new CommandRunner(timeoutMinutes);
         this.jdkResolver = jdkResolver;
@@ -118,19 +135,19 @@ public class DependencyResolver {
         // 多模块项目：先 install 内部模块到本地仓库，解决 SNAPSHOT 依赖
         if (isMultiModuleMaven(projectRootPath)) {
             log.info("Multi-module Maven project detected, running install first");
-            String[] installCmd = {"mvn", "install", "-DskipTests", "-Ddocker.skip=true", "-q"};
+            String[] installCmd = mavenCommand("mvn", "install", "-DskipTests", "-Ddocker.skip=true", "-q");
             int installExit = commandRunner.run(installCmd, projectRootPath, env);
             if (installExit != 0) {
                 log.error("Maven install failed (exit {}), dependency resolution may be incomplete", installExit);
             }
         }
 
-        String[] copyCmd = {
+        String[] copyCmd = mavenCommand(
                 "mvn", "dependency:copy-dependencies",
                 "-DoutputDirectory=" + libraryDir.toAbsolutePath(),
                 "-DincludeScope=runtime",
                 "-q"
-        };
+        );
         int exitCode = commandRunner.run(copyCmd, projectRootPath, env);
         if (exitCode != 0) {
             log.error("Maven dependency resolution failed with exit code: {}", exitCode);
@@ -163,11 +180,13 @@ public class DependencyResolver {
         Path initScript = createGradleInitScript(libraryDir);
         try {
             Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.GRADLE);
-            String gradleCommand = resolveGradleCommand(projectRootPath);
-            String[] command = {
-                    "bash", "-c",
-                    gradleCommand + " --init-script '" + initScript.toAbsolutePath() + "' copyPutiDependencies -q"
-            };
+            String[] gradleBase = resolveGradleCommand(projectRootPath);
+            String[] command = new String[gradleBase.length + 4];
+            System.arraycopy(gradleBase, 0, command, 0, gradleBase.length);
+            command[gradleBase.length]     = "--init-script";
+            command[gradleBase.length + 1] = initScript.toAbsolutePath().toString();
+            command[gradleBase.length + 2] = "copyPutiDependencies";
+            command[gradleBase.length + 3] = "-q";
             int exitCode = commandRunner.run(command, projectRootPath, env);
             if (exitCode != 0) {
                 log.error("Gradle dependency resolution failed with exit code: {}", exitCode);
@@ -180,15 +199,25 @@ public class DependencyResolver {
     }
 
     /**
-     * 检测项目是否自带 gradlew，优先使用，否则回退到系统 gradle
+     * 检测项目是否自带 gradlew，优先使用，否则回退到系统 gradle。
+     * 返回 String[] 而非拼接字符串，避免 bash -c 包裹，兼容 Windows。
      */
-    private String resolveGradleCommand(String projectRootPath) {
-        Path gradlew = Path.of(projectRootPath, "gradlew");
-        if (Files.exists(gradlew) && Files.isExecutable(gradlew)) {
-            return "./gradlew";
+    private String[] resolveGradleCommand(String projectRootPath) {
+        if (isWindows()) {
+            Path gradlewBat = Path.of(projectRootPath, "gradlew.bat");
+            if (Files.exists(gradlewBat)) return new String[]{"cmd", "/c", "gradlew.bat"};
+            Path gradlew = Path.of(projectRootPath, "gradlew");
+            if (Files.exists(gradlew)) return new String[]{"cmd", "/c", "gradlew"};
+            log.info("No gradlew found in project, falling back to system gradle");
+            return new String[]{"cmd", "/c", "gradle"};
+        } else {
+            Path gradlew = Path.of(projectRootPath, "gradlew");
+            if (Files.exists(gradlew) && Files.isExecutable(gradlew)) {
+                return new String[]{"./gradlew"};
+            }
+            log.info("No gradlew found in project, falling back to system gradle");
+            return new String[]{"gradle"};
         }
-        log.info("No gradlew found in project, falling back to system gradle");
-        return "gradle";
     }
 
     /**
@@ -242,7 +271,7 @@ public class DependencyResolver {
         if (isMultiModuleMaven(projectRootPath)) {
             log.info("Multi-module Maven project detected, running install first");
             Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.MAVEN);
-            String[] installCmd = {"mvn", "install", "-DskipTests", "-Ddocker.skip=true", "-q"};
+            String[] installCmd = mavenCommand("mvn", "install", "-DskipTests", "-Ddocker.skip=true", "-q");
             int installExit = commandRunner.run(installCmd, projectRootPath, env);
             if (installExit != 0) {
                 log.error("Maven install failed (exit {}), dependency resolution may be incomplete", installExit);
@@ -261,13 +290,13 @@ public class DependencyResolver {
         try {
             Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.MAVEN);
             // 单次 Maven 调用：同时拷贝 JAR + 输出 GAV 列表
-            String[] combinedCmd = {
+            String[] combinedCmd = mavenCommand(
                     "mvn", "dependency:copy-dependencies", "dependency:list",
                     "-DoutputDirectory=" + libraryDir.toAbsolutePath(),
                     "-DincludeScope=runtime",
                     "-DoutputFile=" + gavOutputFile.toAbsolutePath(),
                     "-q"
-            };
+            );
             int exitCode = commandRunner.run(combinedCmd, projectRootPath, env);
             if (exitCode != 0) {
                 log.error("Maven dependency resolution failed with exit code: {}", exitCode);
@@ -322,12 +351,14 @@ public class DependencyResolver {
         Path initScript = createCombinedGradleInitScript(libraryDir, gavOutputFile);
         try {
             Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.GRADLE);
-            String gradleCommand = resolveGradleCommand(projectRootPath);
+            String[] gradleBase = resolveGradleCommand(projectRootPath);
             // 单次 Gradle 调用：copyPutiDependencies → printPutiDependencies（GAV task 依赖 copy task）
-            String[] command = {
-                    "bash", "-c",
-                    gradleCommand + " --init-script '" + initScript.toAbsolutePath() + "' printPutiDependencies -q"
-            };
+            String[] command = new String[gradleBase.length + 4];
+            System.arraycopy(gradleBase, 0, command, 0, gradleBase.length);
+            command[gradleBase.length]     = "--init-script";
+            command[gradleBase.length + 1] = initScript.toAbsolutePath().toString();
+            command[gradleBase.length + 2] = "printPutiDependencies";
+            command[gradleBase.length + 3] = "-q";
             int exitCode = commandRunner.run(command, projectRootPath, env);
             if (exitCode != 0) {
                 log.error("Gradle dependency resolution failed with exit code: {}", exitCode);

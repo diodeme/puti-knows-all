@@ -102,7 +102,7 @@ public class JdkResolver {
     private String currentJavaHome() {
         String javaHome = System.getProperty("java.home");
         // java.home 指向 jre 子目录时，向上取 JDK 根目录
-        if (javaHome != null && javaHome.endsWith("/jre")) {
+        if (javaHome != null && (javaHome.endsWith("/jre") || javaHome.endsWith("\\jre"))) {
             return javaHome.substring(0, javaHome.length() - 4);
         }
         return javaHome;
