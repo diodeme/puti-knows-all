@@ -19,6 +19,9 @@
         <div v-if="loadingData" class="text-center py-8" style="color: var(--text-muted)">
           {{ t('common.loading') }}
         </div>
+        <div v-else-if="!projectStore.selectedProjectId" class="text-center py-8" style="color: var(--text-muted)">
+          {{ t('project.selectFirst') }}
+        </div>
         <div v-else-if="entryPoints.length === 0" class="text-center py-8" style="color: var(--text-muted)">
           {{ t('overview.noEntryPoints') }}
         </div>
@@ -93,16 +96,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getEntryPoints, getGlobalStats } from '../api/graph'
 import { useSearchStore } from '../stores/search'
+import { useProjectStore } from '../stores/project'
 import StatCard from '../components/overview/StatCard.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const searchStore = useSearchStore()
+const projectStore = useProjectStore()
 
 const entryPoints = ref([])
 const loadingData = ref(false)
@@ -143,11 +148,12 @@ const typeDistribution = computed(() => {
     .sort((a, b) => b.count - a.count)
 })
 
-onMounted(async () => {
+async function loadData() {
+  if (!projectStore.selectedProjectId) return
   loadingData.value = true
   try {
     const [epRes, statsRes] = await Promise.all([
-      getEntryPoints().catch(() => null),
+      getEntryPoints(projectStore.selectedProjectId, projectStore.selectedBranch).catch(() => null),
       getGlobalStats().catch(() => null)
     ])
     entryPoints.value = epRes?.entry_points || []
@@ -158,6 +164,22 @@ onMounted(async () => {
     console.error('Failed to load data:', e)
   } finally {
     loadingData.value = false
+  }
+}
+
+onMounted(() => {
+  if (projectStore.selectedProjectId) {
+    loadData()
+  }
+})
+
+watch(() => projectStore.selectedProjectId, (newId) => {
+  if (newId) {
+    showAllEntryPoints.value = false
+    loadData()
+  } else {
+    entryPoints.value = []
+    globalStats.value = { total_nodes: 0, total_edges: 0, node_type_stats: {}, edge_type_stats: {}, entry_point_count: 0, repo_count: 0 }
   }
 })
 

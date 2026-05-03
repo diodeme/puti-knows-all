@@ -29,8 +29,8 @@ public class GraphQueryDao {
         return graphQueryRepository.findFunctionIdByFullName(methodFullName);
     }
 
-    public GraphQuerySubgraph getSubgraph(String startVid, int pathDepth, String direction) {
-        return graphQueryRepository.getSubgraph(startVid, pathDepth, GraphDirection.fromValue(direction), null);
+    public GraphQuerySubgraph getSubgraph(String startVid, int pathDepth, String direction, List<String> edgeTypes) {
+        return graphQueryRepository.getSubgraph(startVid, pathDepth, GraphDirection.fromValue(direction), edgeTypes);
     }
 
     public Optional<GraphQueryNode> getNodeDetail(String nodeId) {

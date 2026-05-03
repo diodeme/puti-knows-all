@@ -69,7 +69,9 @@
       </div>
       <div style="border-top: 1px solid var(--divider)" class="pt-2 space-y-1">
         <div class="flex items-center gap-2" v-for="item in edgeLegend" :key="item.label">
-          <span class="inline-block w-4 shrink-0" :style="{ background: item.color, height: '2px' }" />
+          <span v-if="item.dashed" class="inline-block w-4 shrink-0"
+                :style="{ background: `repeating-linear-gradient(90deg, ${item.color}, ${item.color} 3px, transparent 3px, transparent 5px)`, height: '2px' }" />
+          <span v-else class="inline-block w-4 shrink-0" :style="{ background: item.color, height: '2px' }" />
           <span style="color: var(--text-secondary)">{{ item.label }}</span>
         </div>
       </div>
@@ -140,7 +142,7 @@ const edgeLegend = computed(() => [
   { label: t('edgeType.depends_on'), color: '#eab308' },
   { label: t('edgeType.injection_calls'), color: '#ec4899' },
   { label: t('edgeType.instance_of'), color: '#f97316' },
-  { label: t('edgeType.contains'), color: '#64748b' },
+  { label: t('edgeType.contains'), color: '#64748b', dashed: true },
   { label: t('edgeType.documented_by'), color: '#94a3b8' },
   { label: t('edgeType.reads_field'), color: '#06b6d4' },
   { label: t('edgeType.writes_field'), color: '#14b8a6' },
@@ -277,7 +279,7 @@ function renderGraph() {
     defs.append('marker')
       .attr('id', `arrow-${type}`)
       .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 22)
+      .attr('refX', 8)
       .attr('refY', 0)
       .attr('markerWidth', 5)
       .attr('markerHeight', 5)
@@ -344,7 +346,11 @@ function renderGraph() {
     .attr('stroke-opacity', 0)
     .attr('stroke-width', d => {
       const type = d.type || d?.properties?.type
-      return (type === 'contains') ? 1 : 1.5
+      return (type === 'contains' || type === 'documented_by') ? 1 : 1.5
+    })
+    .attr('stroke-dasharray', d => {
+      const type = d.type || d?.properties?.type
+      return (type === 'contains') ? '4,3' : 'none'
     })
     .attr('marker-end', d => `url(#arrow-${d.type || d?.properties?.type || 'default'})`)
 
@@ -408,7 +414,9 @@ function renderGraph() {
     .delay((d, i) => 200 + i * 10)
     .attr('stroke-opacity', d => {
       const type = d.type || d?.properties?.type
-      return (type === 'contains') ? 0.15 : 0.35
+      if (type === 'contains') return 0.45
+      if (type === 'documented_by') return 0.2
+      return 0.35
     })
 
   // Interactions
@@ -446,13 +454,27 @@ function renderGraph() {
       updateNodeStyle(event.currentTarget, d)
     })
 
-  // Tick
+  // Tick — adjust line endpoints to stop at node boundaries
   simulation.on('tick', () => {
-    linkElements
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y)
+    linkElements.each(function(d) {
+      const dx = d.target.x - d.source.x
+      const dy = d.target.y - d.source.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < 1) {
+        d3.select(this).attr('x1', d.source.x).attr('y1', d.source.y)
+          .attr('x2', d.target.x).attr('y2', d.target.y)
+        return
+      }
+      const ux = dx / dist
+      const uy = dy / dist
+      const sourceR = getNodeRadius(d.source) + 2
+      const targetR = getNodeRadius(d.target) + 5
+      d3.select(this)
+        .attr('x1', d.source.x + ux * sourceR)
+        .attr('y1', d.source.y + uy * sourceR)
+        .attr('x2', d.target.x - ux * targetR)
+        .attr('y2', d.target.y - uy * targetR)
+    })
 
     nodeElements.attr('transform', d => `translate(${d.x},${d.y})`)
   })

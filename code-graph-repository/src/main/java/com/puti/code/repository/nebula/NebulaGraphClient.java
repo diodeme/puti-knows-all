@@ -149,15 +149,27 @@ public class NebulaGraphClient implements AutoCloseable {
     }
 
     /**
-     * 执行查询。
+     * 执行查询。自动重连：如果当前 session 失效，从连接池获取新 session 重试。
      */
     public ResultSet execute(String query) {
         try {
             log.debug("Executing query: {}", query);
             return session.execute(query);
         } catch (IOErrorException e) {
-            log.error("Failed to execute query: {}", query, e);
-            throw new RuntimeException("Failed to execute query", e);
+            log.warn("Session error, attempting reconnect: {}", e.getMessage());
+            try {
+                synchronized (this) {
+                    if (session != null) {
+                        try { session.release(); } catch (Exception ignored) {}
+                    }
+                    session = pool.getSession(config.getNebulaUsername(), config.getNebulaPassword(), false);
+                    useSpaceWithRetry();
+                }
+                return session.execute(query);
+            } catch (Exception re) {
+                log.error("Reconnect failed for query: {}", query, re);
+                throw new RuntimeException("Failed to execute query after reconnect", re);
+            }
         }
     }
 

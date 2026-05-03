@@ -9,6 +9,9 @@
     </div>
 
     <div v-if="loading" class="text-center py-4 text-xs" style="color: var(--text-muted)">{{ t('common.loading') }}</div>
+    <div v-else-if="!projectStore.selectedProjectId" class="text-center py-4 text-xs" style="color: var(--text-muted)">
+      {{ t('project.selectFirst') }}
+    </div>
     <div v-else-if="entryPoints.length === 0" class="text-center py-4 text-xs" style="color: var(--text-muted)">
       {{ t('entryPoints.noData') }}
     </div>
@@ -32,28 +35,43 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEntryPoints } from '../../api/graph'
 import { useGraphStore } from '../../stores/graph'
+import { useProjectStore } from '../../stores/project'
 
 const { t } = useI18n()
 const graphStore = useGraphStore()
+const projectStore = useProjectStore()
 
 const entryPoints = ref([])
 const loading = ref(false)
 const selected = ref(null)
 
-onMounted(async () => {
+async function loadEntryPoints() {
+  if (!projectStore.selectedProjectId) {
+    entryPoints.value = []
+    return
+  }
   loading.value = true
   try {
-    const res = await getEntryPoints()
+    const res = await getEntryPoints(projectStore.selectedProjectId, projectStore.selectedBranch)
     entryPoints.value = res?.entry_points || []
   } catch (e) {
     console.error('Failed to load entry points:', e)
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  if (projectStore.selectedProjectId) loadEntryPoints()
+})
+
+watch(() => projectStore.selectedProjectId, () => {
+  selected.value = null
+  loadEntryPoints()
 })
 
 function methodStyle(method) {

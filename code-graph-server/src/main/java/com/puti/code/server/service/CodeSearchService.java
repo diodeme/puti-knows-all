@@ -72,7 +72,8 @@ public class CodeSearchService {
             // 填充上下文（上下游调用链）
             if (Boolean.TRUE.equals(request.getIncludeContext())) {
                 int depth = request.getContextDepth() != null ? request.getContextDepth() : 1;
-                CodeSearchData.SearchContext context = buildContext(candidate.getId(), depth);
+                List<String> contextEdgeTypes = GraphQueryService.resolveEdgeTypes(request.getEdgeTypes());
+                CodeSearchData.SearchContext context = buildContext(candidate.getId(), depth, contextEdgeTypes);
                 searchResult.setContext(context);
                 if (context != null) {
                     contextNodesCount += countContextNodes(context);
@@ -253,16 +254,16 @@ public class CodeSearchService {
         }
     }
 
-    private CodeSearchData.SearchContext buildContext(String nodeId, int depth) {
+    private CodeSearchData.SearchContext buildContext(String nodeId, int depth, List<String> edgeTypes) {
         try {
             int normalizedDepth = normalizeDepth(depth);
 
             // upstream (IN direction): edge.source → startNode, 取 source 作为上游
-            GraphQuerySubgraph upstreamGraph = graphQueryDao.getSubgraph(nodeId, normalizedDepth, "IN");
+            GraphQuerySubgraph upstreamGraph = graphQueryDao.getSubgraph(nodeId, normalizedDepth, "IN", edgeTypes);
             List<CodeSearchData.ContextNode> upstream = toContextNodes(upstreamGraph, nodeId, true);
 
             // downstream (OUT direction): startNode → edge.target, 取 target 作为下游
-            GraphQuerySubgraph downstreamGraph = graphQueryDao.getSubgraph(nodeId, normalizedDepth, "OUT");
+            GraphQuerySubgraph downstreamGraph = graphQueryDao.getSubgraph(nodeId, normalizedDepth, "OUT", edgeTypes);
             List<CodeSearchData.ContextNode> downstream = toContextNodes(downstreamGraph, nodeId, false);
 
             CodeSearchData.SearchContext context = new CodeSearchData.SearchContext();

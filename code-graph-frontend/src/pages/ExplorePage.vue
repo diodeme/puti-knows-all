@@ -25,8 +25,8 @@
 
         <GraphCanvas
           v-if="graphStore.currentMethod"
-          :nodes="filteredNodes"
-          :edges="filteredEdges"
+          :nodes="displayNodes"
+          :edges="displayEdges"
           :selected-node-id="graphStore.selectedNodeId"
           :current-method="graphStore.currentMethod"
           :query-type="graphStore.queryType"
@@ -101,7 +101,7 @@ function normalizeNodeType(raw) {
 
 const filteredNodes = computed(() => {
   const types = graphStore.visibleNodeTypes
-  if (types.length === 0) return graphStore.nodes
+  if (types.length === 0) return []
   return graphStore.nodes.filter(n => {
     const t = normalizeNodeType(n?.type || n?.properties?.node_type || 'unknown')
     return types.includes(t)
@@ -111,11 +111,26 @@ const filteredNodes = computed(() => {
 const filteredEdges = computed(() => {
   const types = graphStore.visibleEdgeTypes
   const nodeIds = new Set(filteredNodes.value.map(n => n.id))
-  if (types.length === 0) return graphStore.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+  if (types.length === 0) return []
   return graphStore.edges.filter(e => {
     const t = e?.type || e?.properties?.type || 'unknown'
     return types.includes(t) && nodeIds.has(e.source) && nodeIds.has(e.target)
   })
+})
+
+// Remove isolated nodes (no visible edges after filtering)
+const displayNodes = computed(() => {
+  const connectedIds = new Set()
+  for (const e of filteredEdges.value) {
+    if (e.source) connectedIds.add(e.source)
+    if (e.target) connectedIds.add(e.target)
+  }
+  return filteredNodes.value.filter(n => connectedIds.has(n.id))
+})
+
+const displayEdges = computed(() => {
+  const nodeIds = new Set(displayNodes.value.map(n => n.id))
+  return filteredEdges.value.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
 })
 
 function handleNodeDblClick(node) {

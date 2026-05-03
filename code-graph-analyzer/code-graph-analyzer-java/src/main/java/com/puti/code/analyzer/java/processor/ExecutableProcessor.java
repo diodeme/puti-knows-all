@@ -2,6 +2,7 @@ package com.puti.code.analyzer.java.processor;
 
 import com.puti.code.analyzer.java.context.GraphContext;
 import com.puti.code.analyzer.java.rule.SpoonRuleContextBuilder;
+import com.puti.code.analyzer.java.support.JdkClassChecker;
 import com.puti.code.analyzer.java.support.ParseSupport;
 import com.puti.code.base.enums.ParseType;
 import com.puti.code.base.enums.RuleEngineType;
@@ -21,6 +22,7 @@ import spoon.reflect.code.CtComment;
 import spoon.reflect.code.CtExpression;
 import spoon.reflect.code.CtFieldAccess;
 import spoon.reflect.code.CtIf;
+import spoon.reflect.code.CtConstructorCall;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.code.CtThisAccess;
 import spoon.reflect.code.CtVariableAccess;
@@ -44,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -242,6 +245,7 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
 
     protected void processExecutableCallDependencies(T element, String executableId) {
         element.getElements(new TypeFilter<>(CtInvocation.class)).forEach(invocation -> {
+            // 1. 过滤 null/JDK/类型变量
             CtExecutableReference<?> executableRef = invocation.getExecutable();
             if (executableRef == null || executableRef.getDeclaringType() == null) {
                 return;
@@ -252,24 +256,46 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                 return;
             }
 
+            // 2. 确定 targetClassName 和 isDependency
+            String targetClassName = declaringType.getQualifiedName();
+            boolean isDependency = isInClassIndex(targetClassName);
+
+            // 3. 解析目标方法 FQN
             CtExecutable<?> refExecutable = executableRef.getExecutableDeclaration();
-            if (refExecutable == null) {
-                getLogger().debug("Invocation {} could not resolve executable declaration", invocation);
-                return;
-            }
-            if (ParseSupport.isSimpleGetter(refExecutable) || ParseSupport.isSimpleSetter(refExecutable)) {
+            String targetMethodFullName;
+            if (refExecutable != null) {
+                targetMethodFullName = ParseSupport.getExecutableSignature(targetClassName, refExecutable);
+            } else {
+                // 无法解析可执行声明（noClasspath 下常见），从引用构建签名
+                targetMethodFullName = buildSignatureFromRef(targetClassName, executableRef);
+                // 降级为 OUT_CALLS：无法确认方法细节，直接创建跨边界边
+                boolean isShadow = JdkClassChecker.isJdkClass(declaringType) || (declaringType.getTypeDeclaration() == null && !isDependency);
+                String targetMethodId = IdGenerator.generate(IdGenerator.builder()
+                        .fullQualifiedName(targetMethodFullName)
+                        .isShadow(isShadow)
+                        .build());
+                processEdge(Edge.builder()
+                        .srcId(executableId)
+                        .dstId(targetMethodId)
+                        .type(isDependency ? EdgeType.OUT_CALLS : EdgeType.CALLS)
+                        .lineNumber(invocation.getPosition().isValidPosition() ? invocation.getPosition().getLine() : -1)
+                        .build());
                 return;
             }
 
-            CtType<?> typeDeclaration = declaringType.getTypeDeclaration();
-            String targetClassName = declaringType.getQualifiedName();
-            String targetMethodFullName = ParseSupport.getExecutableSignature(targetClassName, refExecutable);
-            boolean isShadow = typeDeclaration == null || typeDeclaration.isShadow();
+            // 4. getter/setter 过滤：仅项目内部（!isDependency）才跳过
+            if (!isDependency && (ParseSupport.isSimpleGetter(refExecutable) || ParseSupport.isSimpleSetter(refExecutable))) {
+                return;
+            }
+
+            // 5. 生成 targetMethodId
+            boolean isShadow = JdkClassChecker.isJdkClass(declaringType) || (declaringType.getTypeDeclaration() == null && !isDependency);
             String targetMethodId = IdGenerator.generate(IdGenerator.builder()
                     .fullQualifiedName(targetMethodFullName)
                     .isShadow(isShadow)
                     .build());
 
+            // 6. DI 解析（非破坏性）
             CtExpression<?> target = invocation.getTarget();
             String actualTargetClass = targetClassName;
             boolean isInjection = false;
@@ -298,8 +324,8 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                 }
             }
 
+            String effectiveTargetMethodId = targetMethodId;
             if (isInjection && resolvedInjectionPoint != null) {
-                String finalTargetMethodId = targetMethodId;
                 CtType<?> implementationType = getType(actualTargetClass);
                 if (implementationType != null) {
                     CtMethod<?> implementationMethod = null;
@@ -314,7 +340,7 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                     }
                     if (implementationMethod != null) {
                         String actualMethodSignature = ParseSupport.getExecutableSignature(actualTargetClass, implementationMethod);
-                        finalTargetMethodId = IdGenerator.generate(IdGenerator.builder()
+                        effectiveTargetMethodId = IdGenerator.generate(IdGenerator.builder()
                                 .fullQualifiedName(actualMethodSignature)
                                 .isShadow(implementationType.isShadow())
                                 .build());
@@ -326,28 +352,94 @@ public abstract class ExecutableProcessor<T extends CtExecutable<?>> extends Bas
                         injectionPoint,
                         resolution,
                         callSite);
-                dependencyInjectionEnhancer.createInjectionCallEdge(fact, executableId, finalTargetMethodId)
-                        .ifPresent(this::processEdge);
-                return;
+                Optional<Edge> diEdge = dependencyInjectionEnhancer.createInjectionCallEdge(fact, executableId, effectiveTargetMethodId);
+                if (diEdge.isPresent()) {
+                    processEdge(diEdge.get());
+                    return;
+                }
+                // DI 解析失败 → 降级到普通边（不再 return）
             }
 
-            if (isShadow) {
-                processEdge(Edge.builder()
-                        .srcId(executableId)
-                        .dstId(targetMethodId)
-                        .type(EdgeType.OUT_CALLS)
-                        .lineNumber(invocation.getPosition().isValidPosition() ? invocation.getPosition().getLine() : -1)
-                        .build());
-                return;
+            // 7. 确定边类型并创建边
+            EdgeType edgeType;
+            if (isDependency) {
+                edgeType = EdgeType.OUT_CALLS;
+            } else {
+                edgeType = determineCallType(element, executableRef, actualTargetClass);
             }
-
             processEdge(Edge.builder()
                     .srcId(executableId)
-                    .dstId(targetMethodId)
-                    .type(determineCallType(element, executableRef, actualTargetClass))
+                    .dstId(effectiveTargetMethodId)
+                    .type(edgeType)
                     .lineNumber(invocation.getPosition().isValidPosition() ? invocation.getPosition().getLine() : -1)
                     .build());
         });
+
+        // 处理构造函数调用（new Xxx()），CtConstructorCall 与 CtInvocation 是独立类型
+        // 复用 CtInvocation 相同的签名逻辑：通过 getExecutable() 获取 CtExecutableReference
+        element.getElements(new TypeFilter<>(CtConstructorCall.class)).forEach(constructorCall -> {
+            CtExecutableReference<?> executableRef = constructorCall.getExecutable();
+            if (executableRef == null || executableRef.getDeclaringType() == null) {
+                return;
+            }
+
+            CtTypeReference<?> declaringType = executableRef.getDeclaringType();
+            if (ParseSupport.isIgnoreType(declaringType)) {
+                return;
+            }
+
+            String targetClassName = declaringType.getQualifiedName();
+            boolean isDependency = isInClassIndex(targetClassName);
+
+            // 使用与 CtInvocation 相同的签名构建逻辑，确保 FQN 格式一致
+            CtExecutable<?> refExecutable = executableRef.getExecutableDeclaration();
+            String targetMethodFullName;
+            if (refExecutable != null) {
+                targetMethodFullName = ParseSupport.getExecutableSignature(targetClassName, refExecutable);
+            } else {
+                targetMethodFullName = buildSignatureFromRef(targetClassName, executableRef);
+            }
+
+            boolean isShadow = JdkClassChecker.isJdkClass(declaringType) || (declaringType.getTypeDeclaration() == null && !isDependency);
+            String targetMethodId = IdGenerator.generate(IdGenerator.builder()
+                    .fullQualifiedName(targetMethodFullName)
+                    .isShadow(isShadow)
+                    .build());
+
+            EdgeType edgeType = isDependency ? EdgeType.OUT_CALLS : EdgeType.CALLS;
+            processEdge(Edge.builder()
+                    .srcId(executableId)
+                    .dstId(targetMethodId)
+                    .type(edgeType)
+                    .lineNumber(constructorCall.getPosition().isValidPosition() ? constructorCall.getPosition().getLine() : -1)
+                    .build());
+        });
+    }
+
+    private boolean isInClassIndex(String className) {
+        Map<String, String> classIndex = config.getClassToGavIndex();
+        if (classIndex == null || classIndex.isEmpty()) return false;
+        if (!className.contains(".")) return false;
+        return classIndex.containsKey(className);
+    }
+
+    private String buildSignatureFromRef(String className, CtExecutableReference<?> ref) {
+        StringBuilder sig = new StringBuilder(className);
+        sig.append('#').append(ref.getSimpleName()).append('(');
+        List<CtTypeReference<?>> params = ref.getParameters();
+        if (params != null) {
+            for (int i = 0; i < params.size(); i++) {
+                if (i > 0) sig.append(',');
+                if (params.get(i) == null) {
+                    sig.append('?');
+                } else {
+                    String paramFqn = params.get(i).getQualifiedName();
+                    sig.append(paramFqn.contains(".") ? paramFqn : "?");
+                }
+            }
+        }
+        sig.append(')');
+        return sig.toString();
     }
 
     private EdgeType determineCallType(T caller, CtExecutableReference<?> callee, String actualTargetClass) {

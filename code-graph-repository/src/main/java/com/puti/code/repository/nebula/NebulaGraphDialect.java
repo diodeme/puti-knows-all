@@ -290,7 +290,7 @@ public class NebulaGraphDialect implements GraphDialect {
         return comment == null ? "" : comment.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private String escapeString(String value) {
+    String escapeString(String value) {
         return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 

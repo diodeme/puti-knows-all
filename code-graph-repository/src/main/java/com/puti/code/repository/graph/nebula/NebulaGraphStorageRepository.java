@@ -85,6 +85,63 @@ public class NebulaGraphStorageRepository implements GraphStorageRepository {
         nebulaGraphClient.batchInsertEdges(edges);
     }
 
+    private static final int BATCH_DELETE_SIZE = 100;
+
+    @Override
+    public void deleteNode(String nodeId) {
+        nebulaGraphClient.execute("DELETE VERTEX \"" + escapeNebulaString(nodeId) + "\" WITH EDGE");
+    }
+
+    @Override
+    public void deleteNodes(List<String> nodeIds) {
+        // Batch delete: NebulaGraph supports DELETE VERTEX "id1", "id2", "id3" WITH EDGE
+        for (int i = 0; i < nodeIds.size(); i += BATCH_DELETE_SIZE) {
+            List<String> batch = nodeIds.subList(i, Math.min(i + BATCH_DELETE_SIZE, nodeIds.size()));
+            String ids = batch.stream()
+                    .map(id -> "\"" + escapeNebulaString(id) + "\"")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            nebulaGraphClient.execute("DELETE VERTEX " + ids + " WITH EDGE");
+        }
+    }
+
+    @Override
+    public void deleteEdges(List<String> srcIds, List<String> dstIds, String edgeType) {
+        for (int i = 0; i < srcIds.size(); i++) {
+            nebulaGraphClient.execute(String.format(
+                    "DELETE EDGE `%s` ON (\"%s\") -> (\"%s\")",
+                    edgeType, escapeNebulaString(srcIds.get(i)), escapeNebulaString(dstIds.get(i))));
+        }
+    }
+
+    @Override
+    public void deleteEdgesBySrcOrDst(String nodeId) {
+        String escapedId = escapeNebulaString(nodeId);
+        for (String edgeType : resolveEdgeTypes()) {
+            nebulaGraphClient.execute(String.format(
+                    "MATCH ()-[e:`%s`]->() WHERE e._src == hash(\"%s\") OR e._dst == hash(\"%s\") DELETE e",
+                    edgeType, escapedId, escapedId));
+        }
+    }
+
+    private List<String> resolveEdgeTypes() {
+        List<String> edgeTypes = new java.util.ArrayList<>();
+        var result = nebulaGraphClient.execute("SHOW EDGES");
+        if (result != null && result.isSucceeded() && result.getRows() != null) {
+            for (int i = 0; i < result.getRows().size(); i++) {
+                try {
+                    edgeTypes.add(result.rowValues(i).values().get(0).asString());
+                } catch (Exception e) {
+                    log.debug("Failed to parse edge type name from SHOW EDGES row {}", i, e);
+                }
+            }
+        }
+        return edgeTypes;
+    }
+
+    private static String escapeNebulaString(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     @Override
     public void close() {
         nebulaGraphClient.close();

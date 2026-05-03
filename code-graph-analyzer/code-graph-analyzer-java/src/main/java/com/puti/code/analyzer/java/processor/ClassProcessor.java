@@ -232,7 +232,7 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
     private void processClassDependencies(CtType<?> element, String classId) {
         // 处理继承关系
         CtTypeReference<?> superclass = element.getSuperclass();
-        if (superclass != null) {
+        if (superclass != null && !ParseSupport.isIgnoreType(superclass)) {
             CtType<?> typeDeclaration = superclass.getTypeDeclaration();
             boolean shadow = typeDeclaration == null || typeDeclaration.isShadow();
             String superClassName = superclass.getQualifiedName();
@@ -277,7 +277,7 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
         // 处理字段引用
         element.getFields().forEach(field -> {
             CtTypeReference<?> fieldType = field.getType();
-            if (fieldType != null && !fieldType.isPrimitive()) {
+            if (fieldType != null && !fieldType.isPrimitive() && !ParseSupport.isIgnoreType(fieldType)) {
                 CtType<?> typeDeclaration = fieldType.getTypeDeclaration();
                 boolean shadow = typeDeclaration == null || typeDeclaration.isShadow();
 
@@ -290,7 +290,8 @@ public class ClassProcessor extends BaseProcessor<CtType<?>> {
                         .dstId(fieldTypeId)
                         .type(EdgeType.DEPENDS_ON)
                         .dependencyType(DependencyType.ASSOCIATION)
-                        .lineNumber(field.getPosition().getLine())
+                        .lineNumber(field.getPosition() != null && field.getPosition().isValidPosition()
+                                ? field.getPosition().getLine() : -1)
                         .build();
 
                 processEdge(edge);

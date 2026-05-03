@@ -23,8 +23,12 @@
       </div>
 
       <Transition name="dropdown">
-        <div v-if="showSearchDropdown && searchStore.results.length > 0"
+        <div v-if="showSearchDropdown && (searchStore.results.length > 0 || searchStore.loading)"
              class="absolute top-full left-0 right-0 mt-2 glass-panel p-2 max-h-64 overflow-y-auto z-50">
+          <div v-if="searchStore.loading" class="p-2.5 text-center text-xs"
+               style="color: var(--text-secondary)">
+            {{ t('search.searching') }}
+          </div>
           <div
             v-for="(method, idx) in searchStore.results" :key="method.node_id || idx"
             @mousedown.prevent="selectMethod(method)"
@@ -36,14 +40,6 @@
             <div class="text-sm font-medium truncate" style="color: var(--text-primary)">{{ method.name }}</div>
             <div class="text-xs truncate mt-0.5" style="color: var(--text-secondary)">{{ method.full_name }}</div>
           </div>
-        </div>
-      </Transition>
-
-      <Transition name="dropdown">
-        <div v-if="showSearchDropdown && searchStore.loading"
-             class="absolute top-full left-0 right-0 mt-2 glass-panel p-3 text-center z-50"
-             style="color: var(--text-secondary)">
-          {{ t('search.searching') }}
         </div>
       </Transition>
     </div>
@@ -68,6 +64,20 @@
           :style="queryTypeStyle(qt.value)"
         >
           {{ qt.label }}
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <div class="text-xs font-medium mb-2" style="color: var(--text-secondary)">{{ t('search.traversalMode') }}</div>
+      <div class="flex gap-2">
+        <button
+          v-for="mode in traversalModes" :key="mode.value"
+          @click="changeTraversalMode(mode.value)"
+          class="flex-1 py-1.5 text-xs rounded-lg border transition-colors"
+          :style="traversalModeStyle(mode.value)"
+        >
+          {{ mode.label }}
         </button>
       </div>
     </div>
@@ -155,6 +165,13 @@ const queryTypes = computed(() => [
   { value: 'both', label: t('search.both') }
 ])
 
+const traversalModes = computed(() => [
+  { value: 'callChain', label: t('search.callChain') },
+  { value: 'fullGraph', label: t('search.fullGraph') }
+])
+
+const currentTraversalMode = computed(() => graphStore.traversalEdgeTypes === null ? 'callChain' : 'fullGraph')
+
 function queryTypeStyle(value) {
   const active = graphStore.queryType === value
   return {
@@ -212,6 +229,20 @@ function selectMethod(method) {
 function changeQueryType(type) {
   graphStore.setQueryType(type)
   reloadGraph()
+}
+
+function changeTraversalMode(mode) {
+  graphStore.setTraversalEdgeTypes(mode === 'callChain' ? null : [])
+  reloadGraph()
+}
+
+function traversalModeStyle(value) {
+  const active = currentTraversalMode.value === value
+  return {
+    borderColor: active ? 'var(--accent)' : 'var(--border-glass)',
+    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+    background: active ? 'var(--accent-glow)' : 'transparent'
+  }
 }
 
 function changePathDepth(depth) {

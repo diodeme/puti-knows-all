@@ -26,6 +26,8 @@ public interface GraphQueryRepository extends AutoCloseable {
 
     Optional<String> getContainingFilePath(String nodeId);
 
+    List<GraphQueryNode> findNodesByRepoId(String repoId);
+
     default boolean isEntryPoint(String methodId) {
         return findNodeById(methodId)
                 .map(GraphQueryNode::getProperties)

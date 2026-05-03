@@ -157,4 +157,24 @@ public class LocalFileGraphStorageRepository implements GraphStorageRepository {
             log.warn("Failed to close local file graph storage {} writer", label, e);
         }
     }
+
+    @Override
+    public void deleteNode(String nodeId) {
+        throw new UnsupportedOperationException("LocalFile storage does not support deleteNode");
+    }
+
+    @Override
+    public void deleteNodes(List<String> nodeIds) {
+        throw new UnsupportedOperationException("LocalFile storage does not support deleteNodes");
+    }
+
+    @Override
+    public void deleteEdges(List<String> srcIds, List<String> dstIds, String edgeType) {
+        throw new UnsupportedOperationException("LocalFile storage does not support deleteEdges");
+    }
+
+    @Override
+    public void deleteEdgesBySrcOrDst(String nodeId) {
+        throw new UnsupportedOperationException("LocalFile storage does not support deleteEdgesBySrcOrDst");
+    }
 }

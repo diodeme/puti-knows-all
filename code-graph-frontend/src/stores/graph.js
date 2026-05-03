@@ -15,6 +15,7 @@ export const useGraphStore = defineStore('graph', () => {
   const queryType = ref('both')
   const pathDepth = ref(2)
   const currentMethod = ref(null)
+  const traversalEdgeTypes = ref(null) // null = call chain (backend default); [] = full graph
 
   const visibleNodeTypes = ref([])
   const visibleEdgeTypes = ref([])
@@ -27,7 +28,7 @@ export const useGraphStore = defineStore('graph', () => {
     loading.value = true
     error.value = null
     try {
-      const result = await fetchNodes(methodFullName, type || queryType.value, depth || pathDepth.value)
+      const result = await fetchNodes(methodFullName, type || queryType.value, depth || pathDepth.value, traversalEdgeTypes.value)
       const normalizedNodes = (result?.nodes || []).map(node => {
         if (node?.id !== undefined && node?.id !== null) return node
         const fallbackId = node?.properties?.id
@@ -73,6 +74,10 @@ export const useGraphStore = defineStore('graph', () => {
     currentMethod.value = method
   }
 
+  function setTraversalEdgeTypes(types) {
+    traversalEdgeTypes.value = types
+  }
+
   function toggleNodeType(type) {
     const idx = visibleNodeTypes.value.indexOf(type)
     if (idx >= 0) visibleNodeTypes.value.splice(idx, 1)
@@ -87,10 +92,10 @@ export const useGraphStore = defineStore('graph', () => {
 
   return {
     nodes, edges, meta, selectedNodeId, hoveredNodeId, hoveredEdgeId,
-    loading, error, queryType, pathDepth, currentMethod,
+    loading, error, queryType, pathDepth, currentMethod, traversalEdgeTypes,
     visibleNodeTypes, visibleEdgeTypes,
     nodeTypeStats, edgeTypeStats,
-    loadGraph, selectNode, setQueryType, setPathDepth, setCurrentMethod,
+    loadGraph, selectNode, setQueryType, setPathDepth, setCurrentMethod, setTraversalEdgeTypes,
     toggleNodeType, toggleEdgeType
   }
 })

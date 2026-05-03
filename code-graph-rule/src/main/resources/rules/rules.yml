@@ -13,8 +13,17 @@ entryPointRules:
     - "hasAnnotation('org.springframework.web.bind.annotation.DeleteMapping')"
     - "hasAnnotation('org.springframework.web.bind.annotation.PatchMapping')"
 
-    # Spring WebFlux 注解
-    - "hasAnnotation('org.springframework.web.bind.annotation.RestController') and isPublic()"
+    # @RestController 是类级注解，用 hasClassAnnotation 检查
+    - "hasClassAnnotation('org.springframework.web.bind.annotation.RestController') and isPublic()"
+    - "hasClassAnnotation('org.springframework.web.bind.annotation.Controller') and isPublic() and hasAnnotation('org.springframework.web.bind.annotation.RequestMapping')"
+
+    # Spring MVC: 类上有 @RequestMapping + 方法有 @ResponseBody
+    - "hasClassAnnotation('org.springframework.web.bind.annotation.RequestMapping') and hasAnnotation('org.springframework.web.bind.annotation.ResponseBody') and isPublic()"
+
+    # 兜底: @RestController 类中所有 public 方法（排除 Object 基础方法）
+    - "hasClassAnnotation('org.springframework.web.bind.annotation.RestController') and isPublic() and !methodNameMatches('equals|hashCode|toString|clone|finalize|compareTo')"
+    # @Controller 类中带 @ResponseBody 的 public 方法
+    - "hasClassAnnotation('org.springframework.web.bind.annotation.Controller') and isPublic() and hasAnnotation('org.springframework.web.bind.annotation.ResponseBody')"
 
     # JAX-RS 注解
     - "hasAnnotation('javax.ws.rs.GET')"

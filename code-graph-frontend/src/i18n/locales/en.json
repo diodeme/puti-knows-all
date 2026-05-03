@@ -51,7 +51,10 @@
     "both": "Both",
     "all": "All",
     "depthLevel": "Level {n}",
-    "depthDirect": "Level 1 (direct)"
+    "depthDirect": "Level 1 (direct)",
+    "traversalMode": "Traversal Mode",
+    "callChain": "Call Chain",
+    "fullGraph": "Full Graph"
   },
   "detail": {
     "title": "Node Detail",
@@ -88,6 +91,11 @@
     "query": "Query:",
     "zoom": "Zoom:",
     "hint": "Double-click focus · Scroll zoom · Drag pan"
+  },
+  "project": {
+    "selectPlaceholder": "Select Project",
+    "noProjects": "No projects",
+    "selectFirst": "Please select a project first"
   },
   "docs": {
     "title": "Documentation",

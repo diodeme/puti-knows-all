@@ -4,6 +4,7 @@ import spoon.reflect.code.*;
 import spoon.reflect.declaration.CtExecutable;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtParameter;
+import spoon.reflect.reference.CtTypeParameterReference;
 import spoon.reflect.reference.CtTypeReference;
 
 import java.lang.IncompatibleClassChangeError;
@@ -90,8 +91,16 @@ public class ParseSupport {
         if (typeReference == null || typeReference.isPrimitive()) {
             return true;
         }
+        // 泛型类型变量（T, E, K, V 等）不是真正的类型，不应生成边或节点
+        if (typeReference instanceof CtTypeParameterReference) {
+            return true;
+        }
         try {
-            return typeReference.getTypeDeclaration() == null || JdkClassChecker.isJdkClass(typeReference);
+            // Only ignore JDK/standard library classes.
+            // Types with null typeDeclaration (unresolved from classpath) are NOT ignored -
+            // they represent dependency library classes that Spoon can't fully resolve,
+            // but their calls should still create edges (OUT_CALLS) for graph connectivity.
+            return JdkClassChecker.isJdkClass(typeReference);
         } catch (Exception | IncompatibleClassChangeError e) {
             log.debug("Ignoring type due to shadow class build failure: {} - {}", typeReference.getQualifiedName(), e.getClass().getSimpleName());
             return true;

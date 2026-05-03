@@ -18,6 +18,14 @@ public interface GraphStorageRepository extends AutoCloseable {
 
     void batchInsertEdges(List<Edge> edges);
 
+    void deleteNode(String nodeId);
+
+    void deleteNodes(List<String> nodeIds);
+
+    void deleteEdges(List<String> srcIds, List<String> dstIds, String edgeType);
+
+    void deleteEdgesBySrcOrDst(String nodeId);
+
     @Override
     default void close() {
     }

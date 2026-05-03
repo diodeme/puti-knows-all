@@ -322,6 +322,26 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
     }
 
     @Override
+    public List<GraphQueryNode> findNodesByRepoId(String repoId) {
+        List<GraphQueryNode> nodes = new ArrayList<>();
+        String escapedRepoId = escapeNebulaString(repoId);
+        for (String tag : loadTagNames()) {
+            String query = String.format("MATCH (v:`%s`) WHERE v.`%s`.repo_id == \"%s\" RETURN v", tag, tag, escapedRepoId);
+            ResultSet result = executeQuery(query, "find nodes by repoId");
+            if (result == null || !result.isSucceeded() || result.getRows() == null) continue;
+            for (int i = 0; i < result.getRows().size(); i++) {
+                try {
+                    GraphQueryNode node = toQueryNode(result.rowValues(i).values().get(0).asNode());
+                    if (node != null) nodes.add(node);
+                } catch (Exception e) {
+                    log.debug("Failed to parse node by repoId row {}", i, e);
+                }
+            }
+        }
+        return nodes;
+    }
+
+    @Override
     public Optional<String> getContainingFilePath(String nodeId) {
         String query = graphDialect.buildGetContainingFilePathQuery(nodeId);
         ResultSet result = executeQuery(query, "get containing file path");
@@ -528,5 +548,9 @@ public class NebulaGraphQueryRepository implements GraphQueryRepository {
             log.warn("Nebula {} failed, query={}, error={}", operation, query, resultSet.getErrorMessage());
         }
         return resultSet;
+    }
+
+    private static String escapeNebulaString(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

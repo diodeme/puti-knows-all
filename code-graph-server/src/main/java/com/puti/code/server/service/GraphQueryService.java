@@ -37,9 +37,23 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class GraphQueryService {
 
+    private static final List<String> DEFAULT_TRAVERSAL_EDGE_TYPES = List.of(
+            "calls", "out_calls", "implemented_by", "overridden_by",
+            "super_calls", "interface_calls", "subtype_calls", "injection_calls");
+
     private final GraphQueryDao graphQueryDao;
     private final GraphQueryMapper graphQueryMapper;
     private final EdgeDefinitionResolver edgeDefinitionResolver = new EdgeDefinitionResolver();
+
+    static List<String> resolveEdgeTypes(List<String> requested) {
+        if (requested == null) {
+            return DEFAULT_TRAVERSAL_EDGE_TYPES;
+        }
+        if (requested.isEmpty()) {
+            return null;
+        }
+        return requested;
+    }
 
     public List<MethodSearchResult> searchMethodByName(String methodName) {
         List<GraphQueryNode> result = graphQueryDao.searchMethodByName(methodName);
@@ -69,17 +83,18 @@ public class GraphQueryService {
 
     public NodeResponse getNodes(NodeRequest request) {
         String type = request.getQueryType();
+        List<String> edgeTypes = resolveEdgeTypes(request.getEdgeTypes());
         if ("self".equals(type)) {
             return getSelfNode(request.getMethodFullName());
         }
         if ("upstream".equals(type)) {
-            return getSubgraph(request.getMethodFullName(), request.getPathDepth(), "IN");
+            return getSubgraph(request.getMethodFullName(), request.getPathDepth(), "IN", edgeTypes);
         }
         if ("downstream".equals(type)) {
-            return getSubgraph(request.getMethodFullName(), request.getPathDepth(), "OUT");
+            return getSubgraph(request.getMethodFullName(), request.getPathDepth(), "OUT", edgeTypes);
         }
         if ("both".equals(type)) {
-            return getBothSubgraph(request.getMethodFullName(), request.getPathDepth());
+            return getBothSubgraph(request.getMethodFullName(), request.getPathDepth(), edgeTypes);
         }
         throw new IllegalArgumentException("Unknown query type: " + type);
     }
@@ -102,7 +117,7 @@ public class GraphQueryService {
         return response;
     }
 
-    private NodeResponse getSubgraph(String methodFullName, Integer pathDepth, String direction) {
+    private NodeResponse getSubgraph(String methodFullName, Integer pathDepth, String direction, List<String> edgeTypes) {
         int normalizedDepth = normalizePathDepth(pathDepth);
         Map<String, Object> queryInfo = new LinkedHashMap<>();
         queryInfo.put("queryType", direction);
@@ -117,7 +132,7 @@ public class GraphQueryService {
         }
 
         String startVid = vidResult.get();
-        GraphQuerySubgraph subgraphResult = graphQueryDao.getSubgraph(startVid, normalizedDepth, direction);
+        GraphQuerySubgraph subgraphResult = graphQueryDao.getSubgraph(startVid, normalizedDepth, direction, edgeTypes);
         Map<String, GraphNode> allNodes = new LinkedHashMap<>();
         List<GraphEdge> allEdges = new ArrayList<>();
 
@@ -149,38 +164,63 @@ public class GraphQueryService {
         return response;
     }
 
-    private NodeResponse getBothSubgraph(String methodFullName, Integer pathDepth) {
-        NodeResponse upstream = getSubgraph(methodFullName, pathDepth, "IN");
-        NodeResponse downstream = getSubgraph(methodFullName, pathDepth, "OUT");
+    private NodeResponse getBothSubgraph(String methodFullName, Integer pathDepth, List<String> edgeTypes) {
+        int normalizedDepth = normalizePathDepth(pathDepth);
+        Map<String, Object> queryInfo = new LinkedHashMap<>();
+        queryInfo.put("queryType", "both");
+        queryInfo.put("pathDepth", pathDepth != null ? pathDepth : 1);
+        queryInfo.put("resolvedPathDepth", normalizedDepth);
+        queryInfo.put("methodFullName", methodFullName);
+
+        // VID 只查一次，避免两次 getSubgraph 重复查询
+        Optional<String> vidResult = graphQueryDao.findFunctionIdByFullName(methodFullName);
+        if (vidResult.isEmpty()) {
+            NodeResponse response = emptyNodeResponse();
+            enrichResponseMeta(response, queryInfo);
+            return response;
+        }
+
+        String startVid = vidResult.get();
+
+        // 必须分两次定向查询（IN + OUT），不能用 BOTH：
+        // BOTH 会从中间节点双向遍历，导致 hub 节点的无关上游被拉入。
+        // 例如 delete→success 后，BOTH 会从 success 沿 IN 方向拉入所有调用 success 的方法。
+        GraphQuerySubgraph upstreamResult = graphQueryDao.getSubgraph(startVid, normalizedDepth, "IN", edgeTypes);
+        GraphQuerySubgraph downstreamResult = graphQueryDao.getSubgraph(startVid, normalizedDepth, "OUT", edgeTypes);
 
         Map<String, GraphNode> allNodes = new LinkedHashMap<>();
-        for (GraphNode node : upstream.getNodes()) {
-            allNodes.put(node.getId(), node);
-        }
-        for (GraphNode node : downstream.getNodes()) {
-            allNodes.putIfAbsent(node.getId(), node);
-        }
-
-        List<GraphEdge> allEdges = new ArrayList<>(upstream.getEdges());
+        List<GraphEdge> allEdges = new ArrayList<>();
         Set<String> edgeKeys = new HashSet<>();
-        for (GraphEdge e : upstream.getEdges()) {
-            edgeKeys.add(e.getSource() + "->" + e.getTarget() + ":" + e.getType());
-        }
-        for (GraphEdge e : downstream.getEdges()) {
-            String key = e.getSource() + "->" + e.getTarget() + ":" + e.getType();
-            if (edgeKeys.add(key)) {
-                allEdges.add(e);
+
+        for (GraphQuerySubgraph subgraphResult : List.of(upstreamResult, downstreamResult)) {
+            for (GraphQueryNode node : subgraphResult.getNodes()) {
+                GraphQueryRecord.GraphNodeRecord graphNodeRecord = toGraphNodeRecord(node, startVid);
+                if (graphNodeRecord != null) {
+                    allNodes.putIfAbsent(graphNodeRecord.id(), graphQueryMapper.toGraphNode(graphNodeRecord));
+                }
+            }
+            for (GraphQueryEdge edge : subgraphResult.getEdges()) {
+                String edgeKey = edge.getSource() + "->" + edge.getTarget() + ":" + edge.getType();
+                if (!edgeKeys.add(edgeKey)) continue;
+
+                Map<String, Object> edgeProperties = new LinkedHashMap<>(edge.getProperties());
+                String edgeType = edge.getType();
+                String category = edge.getCategory() != null ? edge.getCategory() : resolveEdgeCategory(edgeType, edgeProperties);
+                edgeProperties.putIfAbsent("type", edgeType);
+                edgeProperties.putIfAbsent("category", category);
+                GraphQueryRecord.GraphEdgeRecord edgeRecord = new GraphQueryRecord.GraphEdgeRecord(
+                        edge.getSource(),
+                        edge.getTarget(),
+                        edgeType,
+                        category,
+                        edgeProperties);
+                allEdges.add(graphQueryMapper.toGraphEdge(edgeRecord));
             }
         }
 
         NodeResponse response = new NodeResponse();
         response.setNodes(new ArrayList<>(allNodes.values()));
         response.setEdges(allEdges);
-
-        Map<String, Object> queryInfo = new LinkedHashMap<>();
-        queryInfo.put("queryType", "both");
-        queryInfo.put("pathDepth", pathDepth != null ? pathDepth : 1);
-        queryInfo.put("methodFullName", methodFullName);
         enrichResponseMeta(response, queryInfo);
         return response;
     }
@@ -220,9 +260,9 @@ public class GraphQueryService {
             return 1;
         }
         if (pathDepth == -1) {
-            return 10;
+            return 5;
         }
-        return pathDepth;
+        return Math.min(pathDepth, 5);
     }
 
     GraphQueryRecord.GraphNodeRecord toGraphNodeRecord(GraphQueryNode node, String startVid) {

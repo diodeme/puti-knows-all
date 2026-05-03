@@ -23,12 +23,16 @@ export function searchMethods(methodName) {
   return fetchApi('/search', 'POST', { method_name: methodName })
 }
 
-export function getNodes(methodFullName, queryType, pathDepth = 1) {
-  return fetchApi('/nodes', 'POST', {
+export function getNodes(methodFullName, queryType, pathDepth = 1, edgeTypes = null) {
+  const body = {
     method_full_name: methodFullName,
     query_type: queryType,
     path_depth: pathDepth
-  })
+  }
+  if (edgeTypes !== null) {
+    body.edge_types = edgeTypes
+  }
+  return fetchApi('/nodes', 'POST', body)
 }
 
 export function getNodeDetail(nodeId) {

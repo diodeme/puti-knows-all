@@ -3,6 +3,7 @@ package com.puti.code.server.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -24,6 +25,9 @@ public class CodeSearchRequest {
 
     @JsonProperty("context_depth")
     private Integer contextDepth = 1;
+
+    @JsonProperty("edge_types")
+    private List<String> edgeTypes;
 
     @JsonProperty("repo_id")
     private String repoId;

@@ -1,4 +1,4 @@
-package com.puti.code.app;
+package com.puti.code.app.handler;
 
 import com.puti.code.ai.vector.VectorGenerator;
 import com.puti.code.analyzer.java.context.GraphContext;
@@ -17,8 +17,10 @@ import spoon.reflect.factory.Factory;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -32,12 +34,19 @@ import java.util.stream.Stream;
 @Slf4j
 public class LibraryHandler extends AbstractHandler {
 
+    /** 单个 JAR 处理完成后的回调。参数：{gav, nodeCount, edgeCount} */
+    public record JarResult(String gav, int nodeCount, int edgeCount) {}
+
     private static final String LIB_REPO_ID_PREFIX = "lib:";
 
     private final String libraryPath;
     private final String decompileOutputPath;
     /** GAV → JAR 文件名映射。非空时按映射处理每个 JAR 并设置共享 repo_id。 */
     private Map<String, File> gavToJarMap;
+    /** 每个 GAV 的 [nodeCount, edgeCount] 统计，handle() 执行后可读取。 */
+    private Map<String, int[]> gavStats = new LinkedHashMap<>();
+    /** 单个 JAR 处理完成后的回调，用于逐个更新依赖状态。 */
+    private Consumer<JarResult> onJarCompleted;
 
     public LibraryHandler() {
         this.libraryPath = null;
@@ -61,6 +70,14 @@ public class LibraryHandler extends AbstractHandler {
         this.libraryPath = libraryPath;
         this.decompileOutputPath = decompileOutputPath;
         this.gavToJarMap = gavToJarMap;
+    }
+
+    public void setOnJarCompleted(Consumer<JarResult> onJarCompleted) {
+        this.onJarCompleted = onJarCompleted;
+    }
+
+    public Map<String, int[]> getGavStats() {
+        return gavStats;
     }
 
     public static void main(String[] args) {
@@ -94,7 +111,7 @@ public class LibraryHandler extends AbstractHandler {
                 log.warn("[Library] No JAR files found in {}, aborting", libPath);
                 return;
             }
-            jarEntries = new java.util.LinkedHashMap<>();
+            jarEntries = new LinkedHashMap<>();
             for (File jar : jars) {
                 jarEntries.put(jar.getName(), jar);
             }
@@ -104,7 +121,9 @@ public class LibraryHandler extends AbstractHandler {
 
         AppConfig appConfig = AppConfig.getInstance();
         String originalProjectId = appConfig.getProjectId();
-        try (GraphStorageRepository graphStorageRepository = GraphStorageRepositoryFactory.create(appConfig)) {
+        gavStats.clear();
+        try (GraphStorageRepository rawRepo = GraphStorageRepositoryFactory.create(appConfig)) {
+            CountingGraphStorageRepository graphStorageRepository = new CountingGraphStorageRepository(rawRepo);
             log.info("[Library] Connected to graph storage: {}", appConfig.getGraphStorageType());
             GraphVectorMilvusClient graphVectorMilvusClient = null;
             VectorGenerator vectorGenerator = null;
@@ -140,9 +159,19 @@ public class LibraryHandler extends AbstractHandler {
                     appConfig.setProjectId(repoId);
                     log.debug("[Library] Set projectId to {} for JAR {}", repoId, jar.getName());
 
+                    graphStorageRepository.reset();
                     if (processSingleJar(jar, decompileBasePath, graphContext, appConfig)) {
+                        int nodeCount = graphStorageRepository.getNodeCount();
+                        int edgeCount = graphStorageRepository.getEdgeCount();
+                        gavStats.put(key, new int[]{nodeCount, edgeCount});
+                        if (onJarCompleted != null) {
+                            onJarCompleted.accept(new JarResult(key, nodeCount, edgeCount));
+                        }
                         success++;
                     } else {
+                        if (onJarCompleted != null) {
+                            onJarCompleted.accept(new JarResult(key, 0, 0));
+                        }
                         skipped++;
                     }
                 }

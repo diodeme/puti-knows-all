@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -56,6 +57,13 @@ public class AppConfig {
     private String globalLibraryPath;
     private String globalDecompileOutputPath;
 
+    // 依赖追踪数据库配置 (MySQL)
+    private String trackerMysqlUrl;
+    private String trackerMysqlUsername;
+    private String trackerMysqlPassword;
+    private int trackerOrphanProtectionDays;
+    private String trackerCleanupCron;
+
     // 依赖自动解析配置
     private boolean dependencyAutoResolve;
     private int dependencyTimeoutMinutes;
@@ -72,6 +80,9 @@ public class AppConfig {
     private List<String> projectDiscardRegxList;
 
     private ParseType parseType;
+
+    // className → GAV 映射，由 ProjectHandler 在分析前加载、分析后释放
+    private volatile Map<String, String> classToGavIndex;
 
     // Data Lineage Configs
     private List<String> lineageEntityPatterns;
@@ -161,6 +172,12 @@ public class AppConfig {
 
             globalLibraryPath = properties.getProperty("global.library_path");
             globalDecompileOutputPath = properties.getProperty("global.decompile_output_path");
+
+            trackerMysqlUrl = properties.getProperty("tracker.mysql.url");
+            trackerMysqlUsername = properties.getProperty("tracker.mysql.username");
+            trackerMysqlPassword = properties.getProperty("tracker.mysql.password");
+            trackerOrphanProtectionDays = Integer.parseInt(properties.getProperty("tracker.orphan_protection_days", "7"));
+            trackerCleanupCron = properties.getProperty("tracker.cleanup_cron", "0 3 * * *");
 
             dependencyAutoResolve = Boolean.parseBoolean(properties.getProperty("dependency.auto_resolve", "true"));
             dependencyTimeoutMinutes = Integer.parseInt(properties.getProperty("dependency.timeout_minutes", "30"));

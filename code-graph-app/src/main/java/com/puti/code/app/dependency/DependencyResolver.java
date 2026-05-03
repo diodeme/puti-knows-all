@@ -14,9 +14,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
@@ -34,6 +39,19 @@ public class DependencyResolver {
 
     /** 最近一次过滤被排除的 JAR 文件，用于过滤后删除 */
     private List<File> lastExcludedJars = List.of();
+
+    /** 最近一次过滤后被排除的 GAV→JAR 映射 */
+    private Map<String, File> lastExcludedGavToJar = Map.of();
+
+    /**
+     * 依赖解析完整结果
+     */
+    public record DependencyResolveResult(
+            Map<String, File> kept,
+            Map<String, File> excluded,
+            Map<String, String> classIndex,
+            Set<String> projectModuleGavs
+    ) {}
 
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
@@ -107,6 +125,235 @@ public class DependencyResolver {
     }
 
     /**
+     * 完整依赖解析：导出 JAR + GAV 映射，构建 classIndex，检测项目内部模块。
+     * 用于 ProjectHandler 的共享依赖图谱流程。
+     */
+    public DependencyResolveResult resolveWithGavFull(String projectRootPath, BuildTool buildTool) {
+        Path libraryDir = Path.of(projectRootPath, LIBRARY_DIR_NAME);
+        cleanLibraryDir(libraryDir);
+
+        Map<String, File> allGavToJar = switch (buildTool) {
+            case MAVEN -> resolveMavenWithGav(projectRootPath, libraryDir);
+            case GRADLE -> resolveGradleWithGav(projectRootPath, libraryDir);
+            case UNKNOWN -> {
+                log.warn("Unknown build tool, skipping dependency resolution");
+                yield Map.<String, File>of();
+            }
+        };
+
+        // 过滤前检测项目内部模块（基于 Maven 多模块 install 产生的 JAR）
+        Set<String> projectModuleGavs = detectProjectModules(allGavToJar, projectRootPath, buildTool);
+
+        // 过滤
+        Map<String, File> kept = filterDependencies(allGavToJar);
+
+        // 从 kept 和 excluded 中移除项目内部模块
+        // 项目模块的源码由 Phase 3 Spoon 直接解析，不应由 LibraryHandler 处理
+        // 否则同一类会同时存在 lib 风格和项目风格两种 ID 的节点，导致边断裂
+        Map<String, File> projectModules = new LinkedHashMap<>();
+        for (String moduleGav : projectModuleGavs) {
+            File jar = kept.remove(moduleGav);
+            if (jar != null) {
+                projectModules.put(moduleGav, jar);
+            }
+        }
+
+        // 构建被排除的 GAV→JAR 映射（从全量中减去 kept 和 projectModules，保留 JAR 不删除以供 classIndex 扫描）
+        Map<String, File> excluded = new LinkedHashMap<>(allGavToJar);
+        for (String keptGav : kept.keySet()) {
+            excluded.remove(keptGav);
+        }
+        for (String moduleGav : projectModuleGavs) {
+            excluded.remove(moduleGav);
+        }
+        lastExcludedGavToJar = excluded;
+
+        // 构建 classIndex：扫描所有 JAR（含 excluded），排除项目内部模块
+        Map<String, String> classIndex = buildClassIndex(allGavToJar, projectModuleGavs);
+
+        // 不在此处删除 excluded JAR！
+        // Spoon 分析期间需要 excluded JAR 在 classpath 上（如 Spring MVC），
+        // 否则 @RequestMapping 等注解无法被解析为完整 FQN，入口点判定失效。
+        // 删除由调用方在 handle() 完成后执行。
+
+        log.info("[DependencyResolver] Result: {} kept, {} excluded, {} project modules",
+                kept.size(), excluded.size(), projectModules.size());
+
+        return new DependencyResolveResult(kept, excluded, classIndex, projectModuleGavs);
+    }
+
+    /**
+     * 检测项目内部模块 GAV：groupId 与项目自身 groupId 相同的依赖。
+     * 根据构建工具类型分别处理 Maven 和 Gradle 项目。
+     */
+    private Set<String> detectProjectModules(Map<String, File> gavToJar, String projectRootPath, BuildTool buildTool) {
+        if (buildTool == BuildTool.GRADLE) {
+            return detectProjectModulesGradle(gavToJar, projectRootPath);
+        }
+        // Maven 默认逻辑
+        Set<String> moduleGavs = new java.util.HashSet<>();
+        Path pomXml = Path.of(projectRootPath, "pom.xml");
+        if (Files.exists(pomXml)) {
+            try {
+                Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(pomXml.toFile());
+                NodeList groupIdNodes = doc.getElementsByTagName("groupId");
+                String projectGroupId = null;
+                if (groupIdNodes.getLength() > 0) {
+                    projectGroupId = groupIdNodes.item(0).getTextContent().trim();
+                }
+                if (projectGroupId != null) {
+                    for (String gav : gavToJar.keySet()) {
+                        int colonIdx = gav.indexOf(':');
+                        if (colonIdx <= 0) continue;
+                        String gavGroupId = gav.substring(0, colonIdx);
+                        if (gavGroupId.equals(projectGroupId)) {
+                            moduleGavs.add(gav);
+                        }
+                    }
+                }
+                if (!moduleGavs.isEmpty()) {
+                    log.info("Detected {} project internal modules (groupId={})", moduleGavs.size(), projectGroupId);
+                }
+            } catch (Exception e) {
+                log.debug("Failed to detect project modules from pom.xml", e);
+            }
+        }
+        return moduleGavs;
+    }
+
+    /**
+     * Gradle 项目内部模块检测：读取项目 group，匹配相同 groupId 的 GAV。
+     * 优先从 build.gradle / build.gradle.kts 读取 group 声明，
+     * 回退到 gradle.properties，最后尝试从 Gradle init 脚本输出的 rootProject.group 获取。
+     */
+    private Set<String> detectProjectModulesGradle(Map<String, File> gavToJar, String projectRootPath) {
+        Set<String> moduleGavs = new java.util.HashSet<>();
+        String projectGroup = readGradleProjectGroup(projectRootPath);
+        if (projectGroup == null || projectGroup.isEmpty()) {
+            log.debug("Could not detect Gradle project group, skipping module detection");
+            return moduleGavs;
+        }
+        for (String gav : gavToJar.keySet()) {
+            int colonIdx = gav.indexOf(':');
+            if (colonIdx <= 0) continue;
+            String gavGroupId = gav.substring(0, colonIdx);
+            if (gavGroupId.equals(projectGroup)) {
+                moduleGavs.add(gav);
+            }
+        }
+        if (!moduleGavs.isEmpty()) {
+            log.info("Detected {} Gradle project internal modules (group={})", moduleGavs.size(), projectGroup);
+        }
+        return moduleGavs;
+    }
+
+    /**
+     * 从 Gradle 构建文件中读取项目 group。
+     * 按优先级依次尝试：root build.gradle(.kts) → gradle.properties
+     */
+    private String readGradleProjectGroup(String projectRootPath) {
+        // 1. 尝试从 root build.gradle(.kts) 读取 group 声明
+        for (String fileName : List.of("build.gradle", "build.gradle.kts")) {
+            Path buildFile = Path.of(projectRootPath, fileName);
+            if (Files.exists(buildFile)) {
+                String group = parseGradleGroupFromFile(buildFile);
+                if (group != null) return group;
+            }
+        }
+        // 2. 尝试从 gradle.properties 读取 group
+        Path gradleProps = Path.of(projectRootPath, "gradle.properties");
+        if (Files.exists(gradleProps)) {
+            try {
+                for (String line : Files.readAllLines(gradleProps)) {
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("group")) {
+                        String value = extractGradlePropertyValue(trimmed);
+                        if (value != null && !value.isEmpty()) return value;
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("Failed to read gradle.properties", e);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从 build.gradle(.kts) 内容中解析 group 声明。
+     * 支持格式：group = 'com.example', group "com.example", project.group = 'com.example'
+     */
+    private String parseGradleGroupFromFile(Path buildFile) {
+        try {
+            for (String line : Files.readAllLines(buildFile)) {
+                String trimmed = line.trim();
+                // group = 'xxx' / group = "xxx"
+                if (trimmed.startsWith("group")) {
+                    String value = extractGradlePropertyValue(trimmed);
+                    if (value != null && !value.isEmpty()) return value;
+                }
+            }
+        } catch (IOException e) {
+            log.debug("Failed to read Gradle build file: {}", buildFile, e);
+        }
+        return null;
+    }
+
+    /**
+     * 从 Gradle 属性声明行中提取值。
+     * 支持：group = 'xxx', group = "xxx", group 'xxx', group "xxx"
+     */
+    private String extractGradlePropertyValue(String line) {
+        // group = 'xxx' / group = "xxx" / project.group = 'xxx'
+        java.util.regex.Matcher assignMatcher = java.util.regex.Pattern.compile(
+                "(?:project\\.)?group\\s*=\\s*['\"]([^'\"]+)['\"]").matcher(line);
+        if (assignMatcher.find()) return assignMatcher.group(1);
+        // group 'xxx' / group "xxx" (Groovy method-call style)
+        java.util.regex.Matcher callMatcher = java.util.regex.Pattern.compile(
+                "group\\s+['\"]([^'\"]+)['\"]").matcher(line);
+        if (callMatcher.find()) return callMatcher.group(1);
+        // gradle.properties: group=xxx (no quotes)
+        java.util.regex.Matcher propsMatcher = java.util.regex.Pattern.compile(
+                "group\\s*=\\s*(.+)").matcher(line);
+        if (propsMatcher.find()) {
+            String val = propsMatcher.group(1).trim();
+            if (!val.isEmpty()) return val;
+        }
+        return null;
+    }
+
+    /**
+     * 扫描所有 JAR 的 .class 文件，构建 className → GAV 映射。
+     * 排除项目内部模块（它们的类应使用项目风格 ID）。
+     */
+    private Map<String, String> buildClassIndex(Map<String, File> gavToJar, Set<String> projectModuleGavs) {
+        Map<String, String> classIndex = new LinkedHashMap<>();
+        int totalClasses = 0;
+        for (Map.Entry<String, File> entry : gavToJar.entrySet()) {
+            String gav = entry.getKey();
+            if (projectModuleGavs.contains(gav)) continue;
+            File jar = entry.getValue();
+            if (jar == null || !jar.exists()) continue;
+            try (JarFile jarFile = new JarFile(jar)) {
+                Enumeration<JarEntry> entries = jarFile.entries();
+                while (entries.hasMoreElements()) {
+                    JarEntry je = entries.nextElement();
+                    String name = je.getName();
+                    if (name.endsWith(".class") && !name.contains("$")) {
+                        String className = name.replace('/', '.').replace(".class", "");
+                        classIndex.putIfAbsent(className, gav);
+                        totalClasses++;
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("Failed to scan JAR for classIndex: {}", jar.getName());
+            }
+        }
+        log.info("Built classIndex: {} classes from {} JARs (excluded {} project modules)",
+                totalClasses, gavToJar.size() - projectModuleGavs.size(), projectModuleGavs.size());
+        return classIndex;
+    }
+
+    /**
      * 根据 filter_mode 过滤依赖，并收集被排除的 JAR 文件以供后续删除。
      * blacklist: 排除匹配 exclude.groups 的依赖
      * whitelist: 仅保留匹配 include.groups 的依赖
@@ -131,7 +378,9 @@ public class DependencyResolver {
         Map<String, File> filtered = new LinkedHashMap<>();
         List<File> excludedJars = new ArrayList<>();
         for (Map.Entry<String, File> entry : gavToJar.entrySet()) {
-            String groupId = entry.getKey().substring(0, entry.getKey().indexOf(':'));
+            int colonIdx = entry.getKey().indexOf(':');
+            if (colonIdx <= 0) continue;
+            String groupId = entry.getKey().substring(0, colonIdx);
             if (excludeGroups.stream().anyMatch(groupId::startsWith)) {
                 excludedJars.add(entry.getValue());
                 log.debug("Excluded by blacklist: {}", entry.getKey());
@@ -157,7 +406,9 @@ public class DependencyResolver {
         Map<String, File> filtered = new LinkedHashMap<>();
         List<File> excludedJars = new ArrayList<>();
         for (Map.Entry<String, File> entry : gavToJar.entrySet()) {
-            String groupId = entry.getKey().substring(0, entry.getKey().indexOf(':'));
+            int colonIdx = entry.getKey().indexOf(':');
+            if (colonIdx <= 0) continue;
+            String groupId = entry.getKey().substring(0, colonIdx);
             if (includeGroups.stream().anyMatch(groupId::startsWith)) {
                 filtered.put(entry.getKey(), entry.getValue());
             } else {
@@ -173,7 +424,7 @@ public class DependencyResolver {
         return filtered;
     }
 
-    private void deleteExcludedJars() {
+    public void deleteExcludedJars() {
         if (lastExcludedJars.isEmpty()) return;
         int deleted = 0;
         for (File jar : lastExcludedJars) {
@@ -185,6 +436,7 @@ public class DependencyResolver {
         }
         log.info("Deleted {}/{} excluded JAR files from .library/", deleted, lastExcludedJars.size());
         lastExcludedJars = List.of();
+        lastExcludedGavToJar = Map.of();
     }
 
     // ======================== Maven ========================
@@ -234,9 +486,48 @@ public class DependencyResolver {
         }
     }
 
+    /**
+     * 检测 settings.gradle(.kts) 是否包含 include 指令（多模块 Gradle 项目）
+     */
+    private boolean isMultiModuleGradle(String projectRootPath) {
+        for (String fileName : List.of("settings.gradle", "settings.gradle.kts")) {
+            Path settingsFile = Path.of(projectRootPath, fileName);
+            if (Files.exists(settingsFile)) {
+                try {
+                    for (String line : Files.readAllLines(settingsFile)) {
+                        String trimmed = line.trim();
+                        // include ':module1', ':module2' / include "module1" / include(':module1')
+                        if (trimmed.startsWith("include") && !trimmed.startsWith("includeMetaInf")) {
+                            return true;
+                        }
+                    }
+                } catch (IOException e) {
+                    log.debug("Failed to read {}", settingsFile, e);
+                }
+            }
+        }
+        return false;
+    }
+
     // ======================== Gradle ========================
 
     private int resolveGradle(String projectRootPath, Path libraryDir) {
+        // 多模块项目：先构建内部模块 JAR
+        if (isMultiModuleGradle(projectRootPath)) {
+            log.info("Multi-module Gradle project detected, running jar task first");
+            Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.GRADLE);
+            String[] gradleBase = resolveGradleCommand(projectRootPath);
+            String[] jarCmd = new String[gradleBase.length + 3];
+            System.arraycopy(gradleBase, 0, jarCmd, 0, gradleBase.length);
+            jarCmd[gradleBase.length]     = "jar";
+            jarCmd[gradleBase.length + 1] = "-x";
+            jarCmd[gradleBase.length + 2] = "test";
+            int jarExit = commandRunner.run(jarCmd, projectRootPath, env);
+            if (jarExit != 0) {
+                log.error("Gradle jar task failed (exit {}), dependency resolution may be incomplete", jarExit);
+            }
+        }
+
         Path initScript = createGradleInitScript(libraryDir);
         try {
             Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.GRADLE);
@@ -399,6 +690,22 @@ public class DependencyResolver {
      * 使用合并的 init 脚本注册两个 task，通过 task 依赖确保拷贝先完成。
      */
     private Map<String, File> resolveGradleWithGav(String projectRootPath, Path libraryDir) {
+        // 多模块项目：先构建内部模块 JAR，解决子项目间依赖
+        if (isMultiModuleGradle(projectRootPath)) {
+            log.info("Multi-module Gradle project detected, running jar task first");
+            Map<String, String> env = buildEnvVars(projectRootPath, BuildTool.GRADLE);
+            String[] gradleBase = resolveGradleCommand(projectRootPath);
+            String[] jarCmd = new String[gradleBase.length + 3];
+            System.arraycopy(gradleBase, 0, jarCmd, 0, gradleBase.length);
+            jarCmd[gradleBase.length]     = "jar";
+            jarCmd[gradleBase.length + 1] = "-x";
+            jarCmd[gradleBase.length + 2] = "test";
+            int jarExit = commandRunner.run(jarCmd, projectRootPath, env);
+            if (jarExit != 0) {
+                log.error("Gradle jar task failed (exit {}), dependency resolution may be incomplete", jarExit);
+            }
+        }
+
         Path gavOutputFile;
         try {
             gavOutputFile = Files.createTempFile("puti-gradle-deps-", ".txt");

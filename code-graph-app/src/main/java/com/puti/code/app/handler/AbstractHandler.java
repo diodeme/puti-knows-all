@@ -1,11 +1,11 @@
-package com.puti.code.app;
+package com.puti.code.app.handler;
 
 import com.puti.code.ai.vector.VectorGenerator;
 import com.puti.code.analyzer.java.context.GraphContext;
-import com.puti.code.analyzer.java.rule.SpoonEntryPointRuleEngine;
 import com.puti.code.app.pipeline.DefaultJavaSemanticPipelineFactory;
 import com.puti.code.app.pipeline.JavaSemanticPipeline;
 import com.puti.code.base.config.AppConfig;
+import com.puti.code.analyzer.java.rule.SpoonEntryPointRuleEngine;
 import com.puti.code.base.enums.RuleEngineType;
 import com.puti.code.base.util.FileTool;
 import com.puti.code.repository.graph.GraphStorageRepository;
@@ -108,6 +108,12 @@ public abstract class AbstractHandler {
         environment.setCommentEnabled(true);
         environment.setIgnoreDuplicateDeclarations(true);
         environment.setIgnoreSyntaxErrors(true);
+        // 启用 noClasspath 模式：当 classpath 缺少依赖 JAR 时（如 Spring Web 被 exclude），
+        // Spoon 会从 import 语句推断注解 FQN，而非错误地将注解解析为声明类的包路径。
+        // 不开启时，@RequestMapping 会被解析为 com.xxx.controller.RequestMapping 而非
+        // org.springframework.web.bind.annotation.RequestMapping，导致入口点规则失效。
+        environment.setNoClasspath(true);
+        log.info("Spoon noClasspath mode enabled (resolves annotation FQNs from imports when classpath is incomplete)");
 
         int complianceLevel = detectComplianceLevel(appConfig);
         environment.setComplianceLevel(complianceLevel);

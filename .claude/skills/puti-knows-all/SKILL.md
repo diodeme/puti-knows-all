@@ -38,10 +38,16 @@ description: 知识图谱代码搜索 - 语义搜索代码、查询调用链、�
   "type_weights": null,
   "include_context": true,
   "context_depth": 1,
+  "edge_types": null,
   "repo_id": null,
   "branch_name": null
 }
 ```
+
+**`edge_types` 参数说明**（可选，控制上下文调用链遍历跟随的边类型，与 `/nodes` 接口一致）:
+- `null` 或不传：调用链模式（默认）
+- `[]`：完整图谱模式
+- 自定义列表：指定边类型
 
 **参数选择规则（Claude 自动决策）**:
 
@@ -133,17 +139,24 @@ description: 知识图谱代码搜索 - 语义搜索代码、查询调用链、�
 {
   "method_full_name": "方法全限定名，格式 com.example.Class#method(params)（必填）",
   "query_type": "upstream | downstream | both",
-  "path_depth": 3
+  "path_depth": 3,
+  "edge_types": null
 }
 ```
 
+**`edge_types` 参数说明**（可选，默认为调用链模式）:
+- `null` 或不传：调用链模式（默认），只跟随调用相关边：`calls`, `out_calls`, `implemented_by`, `overridden_by`, `super_calls`, `interface_calls`, `subtype_calls`, `injection_calls`
+- `[]`（空数组）：完整图谱模式，跟随所有边类型（包含 `depends_on`, `contains` 等）
+- `["calls", "out_calls", "depends_on"]`：自定义边类型列表
+
 **参数选择规则**:
 
-| 用户问题 | query_type | path_depth | 说明 |
-|----------|------------|------------|------|
-| "谁调用了这个方法" | `upstream` | 2 | 查找调用方 |
-| "这个方法调用了谁" | `downstream` | 2 | 查找被调用方 |
-| "调用链/调用关系" | `both` | 3 | 完整调用链 |
+| 用户问题 | query_type | path_depth | edge_types | 说明 |
+|----------|------------|------------|------------|------|
+| "谁调用了这个方法" | `upstream` | 2 | 不传 | 查找调用方 |
+| "这个方法调用了谁" | `downstream` | 2 | 不传 | 查找被调用方 |
+| "调用链/调用关系" | `both` | 3 | 不传 | 完整调用链 |
+| "类型依赖/架构依赖" | `both` | 2 | `[]` | 包含 depends_on 的完整图谱 |
 
 **响应结构**:
 ```json

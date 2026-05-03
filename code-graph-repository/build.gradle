@@ -15,6 +15,12 @@ dependencies {
     
     // Logging
     implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // HikariCP (connection pool for DependencyTracker)
+    implementation "com.zaxxer:HikariCP:5.0.1"
+
+    // MySQL Connector
+    implementation "com.mysql:mysql-connector-j:8.3.0"
     
     // Test dependencies
     testImplementation platform("org.junit:junit-bom:${junitVersion}")

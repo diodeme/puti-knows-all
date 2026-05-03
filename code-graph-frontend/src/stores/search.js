@@ -56,6 +56,7 @@ export const useSearchStore = defineStore('search', () => {
     if (!methodName?.trim()) return
     loading.value = true
     error.value = null
+    results.value = []
     try {
       const response = await searchMethods(methodName)
       results.value = response?.data || response || []

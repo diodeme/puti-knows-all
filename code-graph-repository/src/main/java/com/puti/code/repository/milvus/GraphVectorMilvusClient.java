@@ -10,6 +10,7 @@ import io.milvus.common.clientenum.FunctionType;
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
+import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.AddFieldReq;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
@@ -243,6 +244,21 @@ public class GraphVectorMilvusClient implements AutoCloseable {
             log.info("Batch upserted {} node vectors", nodes.size());
         } catch (Exception e) {
             log.error("Batch upsert node vectors error!", e);
+        }
+    }
+
+    /**
+     * 按 repo_id 删除向量数据。
+     */
+    public void deleteByRepoId(String repoId) {
+        if (client == null) return;
+        try {
+            String escaped = repoId.replace("\\", "\\\\").replace("\"", "\\\"");
+            String filter = "repo_id == \"" + escaped + "\"";
+            client.delete(DeleteReq.builder().collectionName(config.getMilvusCollection()).filter(filter).build());
+            log.info("Deleted vectors by repo_id: {}", repoId);
+        } catch (Exception e) {
+            log.error("Failed to delete vectors by repo_id: {}", repoId, e);
         }
     }
 

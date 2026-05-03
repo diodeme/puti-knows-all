@@ -145,6 +145,11 @@ public class LocalFileGraphQueryRepository implements GraphQueryRepository {
     }
 
     @Override
+    public List<GraphQueryNode> findNodesByRepoId(String repoId) {
+        return List.of();
+    }
+
+    @Override
     public GraphGlobalStats getGlobalStats() {
         LocalFileGraphSnapshot snapshot = graphStore.snapshot();
         Map<String, Long> nodeTypeStats = new LinkedHashMap<>();
